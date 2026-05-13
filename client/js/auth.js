@@ -21,13 +21,19 @@ async function verifyAndRestoreSession() {
     if (res.ok) {
       currentUser = await res.json();
       updateAuthUI();
+      if (currentUser.role === 'admin') {
+        const adminLink = document.getElementById('adminNavLink');
+        if (adminLink) adminLink.style.display = '';
+      }
     } else {
-      // Token expired or invalid — clear it
       localStorage.removeItem('authToken');
       authToken = null;
       currentUser = null;
       updateAuthUI();
     }
+  } catch {
+  }
+}
   } catch {
     // Server unreachable — keep token for later retry
   }

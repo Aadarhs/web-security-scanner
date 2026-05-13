@@ -7,7 +7,35 @@ document.addEventListener('DOMContentLoaded', () => {
   initScannerForm();
   initModuleToggles();
   initClearLogs();
+  initCancelScan();
 });
+
+function initCancelScan() {
+  const cancelBtn = document.getElementById('cancelScanBtn');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', async () => {
+      if (!currentScanId) return;
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        showNotification('Please login to cancel scans', 'error');
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/scan/${currentScanId}/cancel`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.success) {
+          addLogEntry('Scan cancelled by user', 'warning', 'System');
+          showNotification('Scan cancelled', 'info');
+        }
+      } catch (err) {
+        showNotification('Failed to cancel scan', 'error');
+      }
+    });
+  }
+}
 
 function initSocket() {
   try {
@@ -103,6 +131,8 @@ async function startScan() {
   document.getElementById('foundCount').textContent = '0';
   document.getElementById('scanStatusBadge').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running';
   document.getElementById('scanStatusBadge').className = 'badge badge-info';
+  const cancelBtn = document.getElementById('cancelScanBtn');
+  if (cancelBtn) cancelBtn.style.display = 'inline-block';
 
   const log = document.getElementById('scanLog');
   log.innerHTML = '';
@@ -178,6 +208,8 @@ function onScanComplete(data) {
   document.getElementById('scanStatusBadge').className = 'badge completed';
   document.getElementById('progressFill').style.width = '100%';
   document.getElementById('progressText').textContent = '100%';
+  const cancelBtn = document.getElementById('cancelScanBtn');
+  if (cancelBtn) cancelBtn.style.display = 'none';
 
   document.getElementById('scanStatusBadge').className = 'badge';
   document.getElementById('scanStatusBadge').style.background = 'rgba(0, 204, 102, 0.15)';

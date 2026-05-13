@@ -1095,3 +1095,51 @@ body {
   .summary-item { flex: 1; justify-content: center; }
   .section-header h1 { font-size: 1.25rem; }
 }
+
+.tool-output {
+  max-height: 400px;
+  overflow-y: auto;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.payload-entry {
+  transition: background 0.2s;
+}
+.payload-entry:hover {
+  background: rgba(0, 240, 255, 0.05) !important;
+}
+
+#pentest .card {
+  min-height: 200px;
+}
+#pentest .card-body {
+  display: flex;
+  flex-direction: column;
+}
+#pentest .cyber-input,
+#pentest .cyber-select {
+  font-size: 0.85rem;
+}
+#pentest .btn-sm {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.8rem;
+}
+
+.text-muted {
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+#pentest .dashboard-grid {
+  grid-template-columns: 1fr 1fr;
+}
+@media (max-width: 992px) {
+  #pentest .dashboard-grid { grid-template-columns: 1fr; }
+  #pentest .dashboard-grid .card[style*="span 2"] { grid-column: auto !important; }
+}

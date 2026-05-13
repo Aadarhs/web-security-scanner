@@ -140,6 +140,12 @@ async function init() {
   } catch (e) {
     // Column already exists - ignore error
   }
+  // Migration: add scan_metadata table
+  try {
+    api.exec("CREATE TABLE IF NOT EXISTS scan_metadata (id INTEGER PRIMARY KEY AUTOINCREMENT, scan_id TEXT REFERENCES scans(id), key TEXT NOT NULL, value TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    api.exec("CREATE INDEX IF NOT EXISTS idx_meta_scan ON scan_metadata(scan_id)");
+  } catch (e) {
+  }
 
   // Save initial database
   saveDb();

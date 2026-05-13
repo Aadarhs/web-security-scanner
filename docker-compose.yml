@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  scanner:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./database:/app/database
+      - ./reports/generated:/app/reports/generated
+      - ./.env:/app/.env
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped

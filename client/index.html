@@ -19,13 +19,15 @@
     <div class="nav-brand">
       <i class="fas fa-shield-halved"></i>
       <span class="brand-text">SecScanner</span>
-      <span class="brand-sub">v1.0</span>
+      <span class="brand-sub">v2.0</span>
     </div>
     <div class="nav-links">
       <a href="#dashboard" class="nav-link active"><i class="fas fa-gauge-high"></i> Dashboard</a>
       <a href="#scanner" class="nav-link"><i class="fas fa-radar"></i> Scanner</a>
       <a href="#history" class="nav-link"><i class="fas fa-clock-rotate-left"></i> History</a>
       <a href="#reports" class="nav-link"><i class="fas fa-file-lines"></i> Reports</a>
+      <a href="#pentest" class="nav-link"><i class="fas fa-crosshairs"></i> Pentest</a>
+      <a href="#admin" class="nav-link" id="adminNavLink" style="display:none;"><i class="fas fa-cog"></i> Admin</a>
       <a href="#docs" class="nav-link"><i class="fas fa-book"></i> Docs</a>
     </div>
     <div class="nav-actions">
@@ -169,6 +171,21 @@
               <label class="option-tag active" data-module="lfi">
                 <i class="fas fa-file-import"></i> LFI
               </label>
+              <label class="option-tag active" data-module="cmdi">
+                <i class="fas fa-terminal"></i> CMDI
+              </label>
+              <label class="option-tag active" data-module="ssrf">
+                <i class="fas fa-cloud"></i> SSRF
+              </label>
+              <label class="option-tag active" data-module="xxe">
+                <i class="fas fa-code"></i> XXE
+              </label>
+              <label class="option-tag active" data-module="network">
+                <i class="fas fa-network-wired"></i> Network
+              </label>
+              <label class="option-tag active" data-module="serverstatus">
+                <i class="fas fa-server"></i> Server
+              </label>
             </div>
           </div>
         </div>
@@ -179,6 +196,7 @@
           <div class="card-header">
             <h3><i class="fas fa-spinner fa-spin"></i> Scan In Progress</h3>
             <span class="badge badge-info" id="scanStatusBadge">Running</span>
+            <button class="btn btn-sm btn-danger" id="cancelScanBtn" style="display:none;"><i class="fas fa-stop"></i> Cancel</button>
           </div>
           <div class="card-body">
             <div class="progress-bar-container">
@@ -224,6 +242,7 @@
             <h3><i class="fas fa-list"></i> Scan Results</h3>
             <div class="card-actions">
               <button class="btn btn-sm" id="viewIgnoredBtn" title="View ignored vulnerabilities"><i class="fas fa-eye-slash"></i> Ignored</button>
+              <button class="btn btn-sm" id="aiAnalysisBtn" title="AI-powered analysis"><i class="fas fa-brain"></i> AI Analysis</button>
               <button class="btn btn-sm" id="downloadJsonBtn"><i class="fas fa-download"></i> JSON</button>
               <button class="btn btn-sm" id="downloadPdfBtn"><i class="fas fa-file-pdf"></i> PDF</button>
             </div>
@@ -248,6 +267,10 @@
               </select>
             </div>
             <div id="vulnerabilitiesList"></div>
+            <div id="aiAnalysisPanel" style="display:none;margin-top:1rem;padding:1rem;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;">
+              <h4><i class="fas fa-brain" style="color:var(--accent)"></i> AI-Powered Analysis</h4>
+              <div id="aiAnalysisContent"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -407,6 +430,249 @@
         </div>
       </div>
     </section>
+
+    <!-- PENTEST SECTION -->
+    <section id="pentest" class="section">
+      <div class="section-header">
+        <h1><i class="fas fa-crosshairs"></i> Pentesting Toolkit</h1>
+        <p class="section-subtitle">Offensive security tools for exploitation, enumeration, and attack simulation</p>
+      </div>
+
+      <div class="dashboard-grid">
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-database" style="color:#ff0044"></i> SQLi Exploiter</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Exploit SQL injection to extract database info via UNION-based payloads</p>
+            <input type="text" id="sqliUrl" class="cyber-input" placeholder="Target URL (e.g., https://site.com/page?id=1)" style="width:100%;margin-bottom:0.3rem;" />
+            <input type="text" id="sqliParam" class="cyber-input" placeholder="Vulnerable parameter (e.g., id)" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="sqliExploitBtn"><i class="fas fa-bolt"></i> Exploit SQLi</button>
+            <div id="sqliResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-user-lock" style="color:#ff6600"></i> Brute Forcer</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Try common credentials against login endpoints</p>
+            <input type="text" id="bfUrl" class="cyber-input" placeholder="Target base URL" style="width:100%;margin-bottom:0.3rem;" />
+            <input type="text" id="bfEndpoint" class="cyber-input" placeholder="Login endpoint (e.g., /api/auth/login)" style="width:100%;margin-bottom:0.3rem;" />
+            <input type="text" id="bfSuccess" class="cyber-input" placeholder="Success indicator (e.g., token)" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="bfBtn"><i class="fas fa-key"></i> Start Brute Force</button>
+            <div id="bfResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-code" style="color:#ffcc00"></i> Payload Generator</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Generate attack payloads for various vulnerability types</p>
+            <select id="payloadType" class="cyber-select" style="width:100%;margin-bottom:0.3rem;">
+              <option value="sqli">SQL Injection</option>
+              <option value="xss">XSS</option>
+              <option value="cmdi">Command Injection</option>
+              <option value="lfi">LFI</option>
+              <option value="ssrf">SSRF</option>
+              <option value="reverse-shell">Reverse Shells</option>
+              <option value="jwt">JWT Attacks</option>
+              <option value="all">All Payloads</option>
+            </select>
+            <button class="btn btn-primary btn-sm" id="payloadGenBtn"><i class="fas fa-flask"></i> Generate</button>
+            <div id="payloadResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-globe" style="color:#00f0ff"></i> Subdomain Enumerator</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Discover subdomains via DNS enumeration</p>
+            <input type="text" id="subDomain" class="cyber-input" placeholder="Domain (e.g., example.com)" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="subDomainBtn"><i class="fas fa-search"></i> Enumerate</button>
+            <div id="subDomainResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-network-wired" style="color:#00cc66"></i> Port Scanner</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Scan 27 common ports on target host</p>
+            <input type="text" id="portHost" class="cyber-input" placeholder="Host (e.g., example.com or IP)" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="portScanBtn"><i class="fas fa-plug"></i> Scan Ports</button>
+            <div id="portResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-folder-open" style="color:#8888ff"></i> Endpoint Fuzzer</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Discover hidden directories and files (50+ paths)</p>
+            <input type="text" id="fuzzUrl" class="cyber-input" placeholder="Target URL" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="fuzzBtn"><i class="fas fa-bomb"></i> Fuzz</button>
+            <div id="fuzzResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass" style="grid-column: span 2;">
+          <div class="card-header"><h3><i class="fas fa-exchange-alt" style="color:#ff66aa"></i> HTTP Method Fuzzer</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Test which HTTP methods are allowed on the target (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, TRACE, CONNECT)</p>
+            <input type="text" id="methodUrl" class="cyber-input" placeholder="Target URL" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="methodFuzzBtn"><i class="fas fa-list"></i> Test Methods</button>
+            <div id="methodResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-globe" style="color:#00cc66"></i> DNS Reconnaissance</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Resolve A, AAAA, MX, NS, TXT, SOA, CNAME records</p>
+            <input type="text" id="dnsDomain" class="cyber-input" placeholder="Domain (e.g., example.com)" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="dnsBtn"><i class="fas fa-search"></i> DNS Lookup</button>
+            <div id="dnsResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-bug" style="color:#ff4444"></i> CVE Search</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Search NVD for known vulnerabilities by keyword</p>
+            <input type="text" id="cveKeyword" class="cyber-input" placeholder="Search (e.g., apache, openssl, nginx)" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="cveBtn"><i class="fas fa-search"></i> Search CVEs</button>
+            <div id="cveResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-hashtag" style="color:#ffcc00"></i> Hash Identifier</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Identify hash types from hash strings (MD5, SHA1, bcrypt, etc.)</p>
+            <input type="text" id="hashInput" class="cyber-input" placeholder="Paste hash string" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="hashBtn"><i class="fas fa-fingerprint"></i> Identify</button>
+            <div id="hashResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-book" style="color:#8888ff"></i> Whois Lookup</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Look up domain registration and ownership information</p>
+            <input type="text" id="whoisTarget" class="cyber-input" placeholder="Domain (e.g., example.com)" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="whoisBtn"><i class="fas fa-search"></i> Lookup</button>
+            <div id="whoisResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-lock" style="color:#00f0ff"></i> SSL/TLS Analyzer</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Analyze SSL/TLS certificate details and security</p>
+            <input type="text" id="sslHost" class="cyber-input" placeholder="Host (e.g., example.com)" style="width:100%;margin-bottom:0.3rem;" />
+            <input type="number" id="sslPort" class="cyber-input" placeholder="Port (default: 443)" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="sslBtn"><i class="fas fa-shield"></i> Analyze</button>
+            <div id="sslResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-shield" style="color:#00cc66"></i> CSP Evaluator</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Analyze Content Security Policy headers</p>
+            <input type="text" id="cspUrl" class="cyber-input" placeholder="Target URL" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="cspBtn"><i class="fas fa-check"></i> Evaluate</button>
+            <div id="cspResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-sliders" style="color:#ff66aa"></i> Parameter Fuzzer</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Discover hidden GET parameters that affect responses</p>
+            <input type="text" id="paramUrl" class="cyber-input" placeholder="Base URL (e.g., https://site.com/page)" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="paramFuzzBtn"><i class="fas fa-bomb"></i> Fuzz Params</button>
+            <div id="paramResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-list" style="color:#ffcc00"></i> Wordlist Generator</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Generate mutated wordlists from base words for brute-forcing</p>
+            <input type="text" id="wlWords" class="cyber-input" placeholder="Base words (comma-separated: admin,root,test)" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="wlBtn"><i class="fas fa-gear"></i> Generate</button>
+            <div id="wlResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-key" style="color:#00f0ff"></i> JWT Decoder</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Decode and analyze JWT tokens for security issues</p>
+            <input type="text" id="jwtToken" class="cyber-input" placeholder="Paste JWT token (eyJ...)" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="jwtBtn"><i class="fas fa-code"></i> Decode</button>
+            <div id="jwtResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-envelope" style="color:#ff6600"></i> Email Extractor</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Extract email addresses and external links from a webpage</p>
+            <input type="text" id="emailUrl" class="cyber-input" placeholder="Target URL" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="emailBtn"><i class="fas fa-search"></i> Extract</button>
+            <div id="emailResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ADMIN SECTION -->
+    <section id="admin" class="section">
+      <div class="section-header">
+        <h1><i class="fas fa-cog"></i> Admin - Auto Improvement</h1>
+        <p class="section-subtitle">System management, module editor, and auto-improvement tools</p>
+      </div>
+
+      <div class="stats-grid" id="adminStats">
+        <div class="stat-card glass"><div class="stat-icon"><i class="fas fa-radar"></i></div><div class="stat-info"><span class="stat-value" id="adminTotalScans">0</span><span class="stat-label">Total Scans</span></div></div>
+        <div class="stat-card glass"><div class="stat-icon"><i class="fas fa-bug"></i></div><div class="stat-info"><span class="stat-value" id="adminTotalVulns">0</span><span class="stat-label">Vulnerabilities</span></div></div>
+        <div class="stat-card glass"><div class="stat-icon"><i class="fas fa-users"></i></div><div class="stat-info"><span class="stat-value" id="adminTotalUsers">0</span><span class="stat-label">Users</span></div></div>
+        <div class="stat-card glass"><div class="stat-icon"><i class="fas fa-file"></i></div><div class="stat-info"><span class="stat-value" id="adminTotalReports">0</span><span class="stat-label">Reports</span></div></div>
+      </div>
+
+      <div class="dashboard-grid">
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-puzzle-piece"></i> Scanner Modules</h3></div>
+          <div class="card-body">
+            <div id="moduleList"></div>
+          </div>
+        </div>
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-code"></i> Module Editor</h3></div>
+          <div class="card-body">
+            <select id="moduleEditorSelect" class="cyber-select" style="width:100%;margin-bottom:0.5rem;"></select>
+            <textarea id="moduleEditorContent" class="cyber-input" style="width:100%;height:300px;font-family:monospace;font-size:12px;"></textarea>
+            <div class="card-actions" style="margin-top:0.5rem;">
+              <button class="btn btn-sm" id="moduleEditorSave"><i class="fas fa-save"></i> Save Module</button>
+              <button class="btn btn-sm" id="moduleEditorRefresh"><i class="fas fa-sync"></i> Refresh</button>
+            </div>
+          </div>
+        </div>
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-flask"></i> Payload Tester</h3></div>
+          <div class="card-body">
+            <input type="text" id="testEndpoint" class="cyber-input" placeholder="Endpoint URL" style="width:100%;margin-bottom:0.3rem;" />
+            <input type="text" id="testPayload" class="cyber-input" placeholder="Test payload" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-sm" id="testPayloadBtn"><i class="fas fa-rocket"></i> Test</button>
+            <div id="testResults" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-chart-simple"></i> System Status</h3></div>
+          <div class="card-body">
+            <div id="systemStatus"></div>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer class="footer">
@@ -445,5 +711,6 @@
   <script src="js/app.js"></script>
   <script src="js/scanner.js"></script>
   <script src="js/auth.js"></script>
+  <script src="js/pentest.js"></script>
 </body>
 </html>

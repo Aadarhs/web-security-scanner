@@ -1,7 +1,7 @@
 {
   "name": "web-security-scanner",
-  "version": "1.0.0",
-  "description": "OWASP Top 10 Web Application Security Scanner with Cyber Dashboard",
+  "version": "2.0.0",
+  "description": "OWASP Top 10 Web Application Security Scanner with Cyber Dashboard, AI Analysis, Network Scanning, and Auto-Improvement Admin",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",

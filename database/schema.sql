@@ -64,6 +64,16 @@ CREATE TABLE IF NOT EXISTS reports (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS scan_metadata (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  scan_id TEXT REFERENCES scans(id),
+  key TEXT NOT NULL,
+  value TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_meta_scan ON scan_metadata(scan_id);
+
 CREATE INDEX IF NOT EXISTS idx_scans_user ON scans(user_id);
 CREATE INDEX IF NOT EXISTS idx_scans_status ON scans(status);
 CREATE INDEX IF NOT EXISTS idx_vulns_scan ON vulnerabilities(scan_id);

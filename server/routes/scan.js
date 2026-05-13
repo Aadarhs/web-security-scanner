@@ -1,9 +1,9 @@
 const express = require('express');
 const db = require('../config/db');
 const { sanitizeUrl, generateId, calculateRiskScore, severityCounts } = require('../utils/helpers');
-const { runScan, scannerModules } = require('../../scanner-engine/index');
+const { runScan, cancelScan, scannerModules } = require('../../scanner-engine/index');
 const { scanLimiter } = require('../middleware/rateLimiter');
-const { optionalAuth } = require('../middleware/auth');
+const { optionalAuth, authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -40,7 +40,7 @@ router.post('/', scanLimiter, optionalAuth, async (req, res) => {
     if (io) io.to(socketId).emit('scan:log', { scanId: id, level, message, module: module || 'engine', timestamp: new Date().toISOString() });
   };
 
-  const onComplete = (id, vulnerabilities) => {
+  const onComplete = (id, vulnerabilities, cancelled = false) => {
     const counts = severityCounts(vulnerabilities);
     const riskScore = calculateRiskScore(vulnerabilities);
 
@@ -53,19 +53,20 @@ router.post('/', scanLimiter, optionalAuth, async (req, res) => {
       try { insertVuln.run(id, v.type, v.severity, v.title, v.description, v.endpoint, v.parameter, v.payload, v.evidence, v.remediation, v.owasp_category, v.cve_id); } catch (e) { console.error('[Scan] Insert vuln error:', e); }
     }
 
+    const status = cancelled ? 'cancelled' : 'completed';
     db.prepare(`
       UPDATE scans SET 
-        status = 'completed', progress = 100, risk_score = ?,
+        status = ?, progress = 100, risk_score = ?,
         total_vulnerabilities = ?, critical_count = ?, high_count = ?,
         medium_count = ?, low_count = ?, info_count = ?,
         completed_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(riskScore, vulnerabilities.length, counts.critical, counts.high, counts.medium, counts.low, counts.info, id);
+    `).run(status, riskScore, vulnerabilities.length, counts.critical, counts.high, counts.medium, counts.low, counts.info, id);
 
     try { db.save(); } catch {}
 
     if (io) {
-      io.to(socketId).emit('scan:complete', {
+      io.to(socketId).emit(cancelled ? 'scan:cancelled' : 'scan:complete', {
         scanId: id,
         vulnerabilities: vulnerabilities,
         counts,
@@ -77,6 +78,22 @@ router.post('/', scanLimiter, optionalAuth, async (req, res) => {
   setImmediate(() => {
     runScan(scanId, url, onProgress, onLog, onComplete, requestedModules);
   });
+});
+
+router.post('/:id/cancel', authenticate, (req, res) => {
+  const { id } = req.params;
+  const scan = db.prepare('SELECT id, status FROM scans WHERE id = ?').get(id);
+  if (!scan) return res.status(404).json({ error: 'Scan not found' });
+  if (scan.status !== 'running') return res.status(400).json({ error: 'Scan is not running' });
+
+  cancelScan(id);
+  db.prepare("UPDATE scans SET status = 'cancelled', progress = 100 WHERE id = ?").run(id);
+  db.save();
+
+  const io = req.app.get('io');
+  if (io) io.emit('scan:cancelled', { scanId: id });
+
+  res.json({ success: true, message: 'Scan cancelled' });
 });
 
 router.get('/history', (req, res) => {

@@ -18,7 +18,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: '*',
-    methods: ['GET', 'POST'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
   },
   maxHttpBufferSize: 1e8,
 });
@@ -39,6 +39,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/scan', scanRoutes);
 app.use('/api/results', resultsRoutes);
 app.use('/api/reports', reportsRoutes);
+
+const aiRoutes = require('./routes/ai');
+const adminRoutes = require('./routes/admin');
+const pentestRoutes = require('./routes/pentest');
+app.use('/api/ai', aiRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/pentest', pentestRoutes);
 
 app.get('/api/dashboard/stats', (req, res) => {
   const getVal = (query, params, key) => {
@@ -129,7 +136,7 @@ async function start() {
   server.listen(PORT, () => {
     console.log(`\x1b[36m`);
     console.log(`  ╔═══════════════════════════════════════════╗`);
-    console.log(`  ║     Web Security Scanner v1.0             ║`);
+    console.log(`  ║     Web Security Scanner v2.0             ║`);
     console.log(`  ║     Running on: http://localhost:${String(PORT).padEnd(5)}║`);
     console.log(`  ║     OWASP Top 10 Scanner Engine            ║`);
     console.log(`  ╚═══════════════════════════════════════════╝`);

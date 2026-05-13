@@ -14,6 +14,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initSearch();
   initDownloadButtons();
   initDocsSearch();
+  initAIAnalysis();
+  initAdmin();
+  checkAdminAccess();
 });
 
 function initParticles() {
@@ -751,9 +754,29 @@ async function downloadJSON() {
 }
 
 async function downloadPDF() {
-  const vulnSection = document.querySelector('.results-summary');
-  if (!vulnSection) return;
-  showNotification('PDF generation requested. Use the Reports section to download.', 'info');
+  const id = window.currentScanId;
+  if (!id) {
+    showNotification('No scan results available. Please run a scan first.', 'error');
+    return;
+  }
+  try {
+    showNotification('Generating PDF report...', 'info');
+    const res = await fetch(`${API_BASE}/reports/generate/${id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ format: 'pdf' })
+    });
+    const data = await res.json();
+    if (data.reportId) {
+      showNotification('PDF report generated! Opening download...', 'success');
+      window.open(`${API_BASE}/reports/${data.reportId}/download`, '_blank');
+      initReports();
+    } else {
+      showNotification(data.error || 'Failed to generate PDF', 'error');
+    }
+  } catch (err) {
+    showNotification('Failed to generate PDF: ' + err.message, 'error');
+  }
 }
 
 function debounce(fn, ms) {
@@ -775,4 +798,228 @@ async function fetchWithTimeout(url, options = {}, timeout = 10000) {
     clearTimeout(id);
     throw err;
   }
+}
+
+function initAIAnalysis() {
+  const btn = document.getElementById('aiAnalysisBtn');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const id = window.currentScanId;
+    if (!id) {
+      showNotification('No scan results to analyze', 'error');
+      return;
+    }
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      showNotification('Please login to use AI analysis', 'error');
+      return;
+    }
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+    const panel = document.getElementById('aiAnalysisPanel');
+    const content = document.getElementById('aiAnalysisContent');
+    if (panel) panel.style.display = 'block';
+    if (content) content.innerHTML = '<p>Generating AI-powered vulnerability analysis...</p>';
+
+    try {
+      const res = await fetch(`${API_BASE}/ai/analyze/${id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      if (data.analysis) {
+        renderAIAnalysis(data.analysis);
+      } else {
+        if (content) content.innerHTML = `<p class="error">${data.error || 'Analysis failed'}</p>`;
+      }
+    } catch (err) {
+      if (content) content.innerHTML = `<p class="error">AI analysis error: ${err.message}</p>`;
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-brain"></i> AI Analysis';
+  });
+}
+
+function renderAIAnalysis(analysis) {
+  const content = document.getElementById('aiAnalysisContent');
+  if (!content) return;
+
+  let html = `<div class="ai-risk-badge" style="padding:0.5rem;margin-bottom:0.5rem;border-radius:4px;background:rgba(0,240,255,0.1);border-left:3px solid var(--accent);">
+    <p style="margin:0;"><strong>Risk Summary:</strong> ${analysis.riskSummary || 'No risk summary available'}</p>
+  </div>`;
+
+  if (analysis.prioritizedActions && analysis.prioritizedActions.length > 0) {
+    html += '<h5 style="margin-top:0.5rem;">Prioritized Actions</h5>';
+    for (const action of analysis.prioritizedActions) {
+      const color = action.severity === 'critical' ? '#ff0044' : action.severity === 'high' ? '#ff6600' : action.severity === 'medium' ? '#ffcc00' : '#4488ff';
+      html += `<div style="padding:0.5rem;margin-bottom:0.3rem;border-left:3px solid ${color};background:var(--card-bg);border-radius:4px;">
+        <strong style="color:${color}">[${action.severity.toUpperCase()}]</strong> ${action.title}
+        <p style="margin:0.2rem 0 0 0;font-size:0.85rem;">${action.action || ''}</p>
+        ${action.businessImpact ? `<p style="margin:0.2rem 0 0 0;font-size:0.8rem;color:var(--text-muted);"><em>Impact: ${action.businessImpact}</em></p>` : ''}
+      </div>`;
+    }
+  }
+
+  if (analysis.chainingPossibilities && analysis.chainingPossibilities.length > 0) {
+    html += '<h5 style="margin-top:0.5rem;">Attack Chaining Possibilities</h5><ul>';
+    for (const chain of analysis.chainingPossibilities) {
+      html += `<li style="font-size:0.85rem;">${chain}</li>`;
+    }
+    html += '</ul>';
+  }
+
+  content.innerHTML = html;
+}
+
+function checkAdminAccess() {
+  const token = localStorage.getItem('authToken');
+  if (!token) return;
+  fetch(`${API_BASE}/auth/me`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  }).then(res => res.json()).then(user => {
+    if (user.role === 'admin') {
+      document.getElementById('adminNavLink').style.display = '';
+    }
+  }).catch(() => {});
+}
+
+function initAdmin() {
+  initAdminModules();
+  initAdminEditor();
+  initAdminTester();
+}
+
+async function initAdminModules() {
+  const list = document.getElementById('moduleList');
+  if (!list) return;
+
+  const token = localStorage.getItem('authToken');
+  if (!token) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/modules`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await res.json();
+    if (!data.modules) return;
+
+    list.innerHTML = '<table class="cyber-table"><thead><tr><th>Module</th><th>Size</th><th>Modified</th></tr></thead><tbody>';
+    for (const mod of data.modules) {
+      list.innerHTML += `<tr>
+        <td>${mod.name}</td>
+        <td>${(mod.size / 1024).toFixed(1)} KB</td>
+        <td>${new Date(mod.modified).toLocaleDateString()}</td>
+      </tr>`;
+    }
+    list.innerHTML += '</tbody></table>';
+  } catch {}
+}
+
+async function initAdminEditor() {
+  const select = document.getElementById('moduleEditorSelect');
+  const saveBtn = document.getElementById('moduleEditorSave');
+  const refreshBtn = document.getElementById('moduleEditorRefresh');
+  const content = document.getElementById('moduleEditorContent');
+  if (!select || !saveBtn) return;
+
+  const token = localStorage.getItem('authToken');
+  if (!token) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/modules`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await res.json();
+    if (data.modules) {
+      select.innerHTML = data.modules.map(m => `<option value="${m.name}">${m.name}</option>`).join('');
+    }
+  } catch {}
+
+  select.addEventListener('change', async () => {
+    if (!select.value) return;
+    try {
+      const res = await fetch(`${API_BASE}/admin/modules/${select.value}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (content) content.value = data.content || '';
+    } catch {}
+  });
+
+  if (select.value) select.dispatchEvent(new Event('change'));
+
+  saveBtn.addEventListener('click', async () => {
+    if (!select.value || !content) return;
+    try {
+      const res = await fetch(`${API_BASE}/admin/modules/${select.value}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ content: content.value }),
+      });
+      const data = await res.json();
+      showNotification(data.message || 'Module saved', data.success ? 'success' : 'error');
+    } catch (err) {
+      showNotification('Failed to save module: ' + err.message, 'error');
+    }
+  });
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+      if (select.value) select.dispatchEvent(new Event('change'));
+    });
+  }
+}
+
+async function initAdminTester() {
+  const btn = document.getElementById('testPayloadBtn');
+  const endpoint = document.getElementById('testEndpoint');
+  const payload = document.getElementById('testPayload');
+  const results = document.getElementById('testResults');
+  if (!btn) return;
+
+  btn.addEventListener('click', async () => {
+    if (!endpoint.value) {
+      showNotification('Please enter an endpoint URL', 'error');
+      return;
+    }
+    results.innerHTML = '<p>Testing...</p>';
+    try {
+      const token = localStorage.getItem('authToken');
+      const res = await fetch(`${API_BASE}/admin/modules/test/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          endpoint: endpoint.value,
+          payload: payload.value || 'test',
+        }),
+      });
+      const data = await res.json();
+      results.innerHTML = `<div style="font-size:0.85rem;">
+        <p><strong>Status:</strong> ${data.status || 'Error'}</p>
+        <p><strong>Response Size:</strong> ${data.bodyLength || 0} bytes</p>
+        ${data.error ? `<p><strong>Error:</strong> ${data.error}</p>` : ''}
+      </div>`;
+    } catch (err) {
+      results.innerHTML = `<p class="error">${err.message}</p>`;
+    }
+  });
+}
+
+async function loadAdminStats() {
+  const token = localStorage.getItem('authToken');
+  if (!token) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/stats`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await res.json();
+    document.getElementById('adminTotalScans').textContent = data.totalScans || 0;
+    document.getElementById('adminTotalVulns').textContent = data.totalVulns || 0;
+    document.getElementById('adminTotalUsers').textContent = data.totalUsers || 0;
+    document.getElementById('adminTotalReports').textContent = data.totalReports || 0;
+  } catch {}
 }
