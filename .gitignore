@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.db
+reports/generated/*
+!reports/generated/.gitkeep
+client/assets/*
+!client/assets/.gitkeep
+.DS_Store
+npm-debug.log*
