@@ -34,10 +34,6 @@ async function verifyAndRestoreSession() {
   } catch {
   }
 }
-  } catch {
-    // Server unreachable — keep token for later retry
-  }
-}
 
 function updateAuthUI() {
   const loginBtn = document.getElementById('loginBtn');
