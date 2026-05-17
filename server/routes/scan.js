@@ -30,9 +30,9 @@ router.post('/', scanLimiter, optionalAuth, async (req, res) => {
     io.to(socketId).emit('scan:started', { scanId, targetUrl: url });
   }
 
-  const onProgress = (id, progress) => {
+  const onProgress = (id, progress, eta) => {
     db.prepare('UPDATE scans SET progress = ? WHERE id = ?').run(progress, id);
-    if (io) io.to(socketId).emit('scan:progress', { scanId: id, progress });
+    if (io) io.to(socketId).emit('scan:progress', { scanId: id, progress, eta });
   };
 
   const onLog = (id, level, message, module) => {

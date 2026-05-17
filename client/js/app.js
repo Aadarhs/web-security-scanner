@@ -1023,3 +1023,470 @@ async function loadAdminStats() {
     document.getElementById('adminTotalReports').textContent = data.totalReports || 0;
   } catch {}
 }
+
+initOSINT();
+initCompliance();
+initDiff();
+initNotifications();
+
+function initOSINT() {
+  const techBtn = document.getElementById('techDetectBtn');
+  const dnsBtn = document.getElementById('dnsSecurityBtn');
+  const breachEmailBtn = document.getElementById('breachEmailBtn');
+  const breachPasswordBtn = document.getElementById('breachPasswordBtn');
+
+  if (techBtn) {
+    techBtn.addEventListener('click', async () => {
+      const url = document.getElementById('techUrl')?.value;
+      if (!url) { showNotification('Please enter a URL', 'error'); return; }
+      const container = document.getElementById('techResults');
+      container.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Detecting technologies...</p>';
+      try {
+        const res = await fetch(`${API_BASE}/tech-detect/detect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        const data = await res.json();
+        if (data.error) { container.innerHTML = `<p class="error">${data.error}</p>`; return; }
+        let html = `<div class="results-summary" style="margin-bottom:0.5rem;">`;
+        html += `<span class="summary-item info">Technologies: ${data.technologies.length}</span>`;
+        if (data.serverHeader) html += `<span class="summary-item info">Server: ${data.serverHeader}</span>`;
+        html += `</div>`;
+        if (data.technologies.length === 0) {
+          html += `<div class="empty-state"><p>No technologies detected</p></div>`;
+        } else {
+          const cats = {};
+          for (const t of data.technologies) {
+            if (!cats[t.category]) cats[t.category] = [];
+            cats[t.category].push(t.name);
+          }
+          html += '<div style="font-size:0.85rem;">';
+          for (const [cat, techs] of Object.entries(cats)) {
+            html += `<div style="margin-bottom:0.5rem;"><strong style="color:var(--accent)">${cat}:</strong> `;
+            html += techs.map(t => `<span class="badge badge-info">${t}</span>`).join(' ');
+            html += '</div>';
+          }
+          html += '</div>';
+        }
+        if (data.headers) {
+          const secHeaders = ['strict-transport-security','content-security-policy','x-frame-options','x-content-type-options','referrer-policy'];
+          const present = secHeaders.filter(h => data.headers[h]);
+          if (present.length > 0) {
+            html += '<div style="margin-top:0.5rem;font-size:0.8rem;">';
+            html += '<strong>Security Headers Present:</strong> ';
+            html += present.map(h => `<span class="badge badge-success">${h}</span>`).join(' ');
+            html += '</div>';
+          }
+        }
+        container.innerHTML = html;
+      } catch (err) {
+        container.innerHTML = `<p class="error">${err.message}</p>`;
+      }
+    });
+  }
+
+  if (dnsBtn) {
+    dnsBtn.addEventListener('click', async () => {
+      const domain = document.getElementById('dnsDomain')?.value;
+      if (!domain) { showNotification('Please enter a domain', 'error'); return; }
+      const container = document.getElementById('dnsSecurityResults');
+      container.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Analyzing DNS security...</p>';
+      try {
+        const res = await fetch(`${API_BASE}/dns-security/analyze?domain=${encodeURIComponent(domain)}`);
+        const data = await res.json();
+        if (data.error) { container.innerHTML = `<p class="error">${data.error}</p>`; return; }
+        let html = `<div class="results-summary" style="margin-bottom:0.5rem;">
+          <span class="summary-item ${data.securityScore >= 80 ? 'info' : data.securityScore >= 50 ? 'medium' : 'high'}">Security Score: ${data.securityScore}/100</span>
+        </div>`;
+        html += '<div style="font-size:0.85rem;">';
+        html += `<div style="margin-bottom:0.3rem;"><strong>SPF:</strong> ${data.spf ? `<span class="badge badge-success">Configured</span>` : `<span class="badge badge-error">Missing</span>`}</div>`;
+        html += `<div style="margin-bottom:0.3rem;"><strong>DKIM:</strong> ${data.dkim ? `<span class="badge badge-success">Configured${data.dkimSelector ? ` (${data.dkimSelector})` : ''}</span>` : `<span class="badge badge-error">Missing</span>`}</div>`;
+        html += `<div style="margin-bottom:0.3rem;"><strong>DMARC:</strong> ${data.dmarc ? `<span class="badge badge-success">Configured</span>` : `<span class="badge badge-error">Missing</span>`}</div>`;
+        html += `<div style="margin-bottom:0.3rem;"><strong>DNSSEC:</strong> ${data.dnssec ? `<span class="badge badge-success">Enabled</span>` : `<span class="badge badge-error">Not Enabled</span>`}</div>`;
+        if (data.mx && data.mx.length > 0) {
+          html += `<div style="margin-bottom:0.3rem;"><strong>MX Records:</strong> ${data.mx.map(m => `${m.exchange} (priority ${m.priority})`).join(', ')}</div>`;
+        }
+        if (data.issues && data.issues.length > 0) {
+          html += '<div style="margin-top:0.5rem;"><strong style="color:#ff6600">Issues:</strong><ul>';
+          for (const issue of data.issues) html += `<li>${issue}</li>`;
+          html += '</ul></div>';
+        }
+        if (data.recommendations && data.recommendations.length > 0) {
+          html += '<div style="margin-top:0.3rem;"><strong style="color:#00cc66">Recommendations:</strong><ul>';
+          for (const rec of data.recommendations) html += `<li>${rec}</li>`;
+          html += '</ul></div>';
+        }
+        html += '</div>';
+        container.innerHTML = html;
+      } catch (err) {
+        container.innerHTML = `<p class="error">${err.message}</p>`;
+      }
+    });
+  }
+
+  if (breachEmailBtn) {
+    breachEmailBtn.addEventListener('click', async () => {
+      const email = document.getElementById('breachEmail')?.value;
+      if (!email) { showNotification('Please enter an email', 'error'); return; }
+      const container = document.getElementById('breachResults');
+      container.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Checking email against breach databases...</p>';
+      try {
+        const res = await fetch(`${API_BASE}/breach-check/check-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const data = await res.json();
+        if (data.error) { container.innerHTML = `<p class="error">${data.error}</p>`; return; }
+        let html = `<div class="results-summary" style="margin-bottom:0.5rem;">
+          <span class="summary-item ${data.pwned ? 'critical' : 'info'}">${data.pwned ? `⚠ Pwned! Found in ${data.pwnedCount} breaches` : '✅ Not found in any known breaches'}</span>
+        </div>`;
+        if (data.breaches && data.breaches.length > 0) {
+          html += '<div style="font-size:0.85rem;"><strong>Breach Details:</strong></div>';
+          for (const b of data.breaches) {
+            html += `<div style="padding:0.3rem;margin-bottom:0.2rem;border-left:3px solid #ff4444;background:var(--card-bg);font-size:0.8rem;">
+              <strong>${b.name}</strong> (${b.date || 'Unknown'})<br/>
+              Domain: ${b.domain || 'N/A'}<br/>
+              ${b.dataClasses ? `Data: ${b.dataClasses.join(', ')}` : ''}
+            </div>`;
+          }
+        }
+        html += `<div style="margin-top:0.3rem;font-size:0.8rem;color:var(--text-muted);">Password reuse count: ${data.pwnedCount}</div>`;
+        container.innerHTML = html;
+      } catch (err) {
+        container.innerHTML = `<p class="error">${err.message}</p>`;
+      }
+    });
+  }
+
+  if (breachPasswordBtn) {
+    breachPasswordBtn.addEventListener('click', async () => {
+      const password = document.getElementById('breachPassword')?.value;
+      if (!password) { showNotification('Please enter a password', 'error'); return; }
+      const container = document.getElementById('breachResults');
+      container.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Checking password...</p>';
+      try {
+        const res = await fetch(`${API_BASE}/breach-check/check-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        });
+        const data = await res.json();
+        if (data.error) { container.innerHTML = `<p class="error">${data.error}</p>`; return; }
+        const strengthColor = data.strength === 'strong' ? '#00cc66' : data.strength === 'moderate' ? '#ffcc00' : '#ff4444';
+        let html = `<div class="results-summary" style="margin-bottom:0.5rem;">
+          <span class="summary-item ${data.pwned ? 'critical' : 'info'}">${data.pwned ? `⚠ Password found in ${data.pwnedCount} breaches!` : '✅ Password not found in breaches'}</span>
+          <span class="summary-item" style="border-color:${strengthColor}">Strength: ${data.strength.toUpperCase()}</span>
+        </div>`;
+        html += '<div style="font-size:0.85rem;">';
+        html += `<div>Length: ${data.passwordLength} chars</div>`;
+        html += `<div>Uppercase: ${data.hasUpper ? '✅' : '❌'}</div>`;
+        html += `<div>Lowercase: ${data.hasLower ? '✅' : '❌'}</div>`;
+        html += `<div>Numbers: ${data.hasNumber ? '✅' : '❌'}</div>`;
+        html += `<div>Special: ${data.hasSpecial ? '✅' : '❌'}</div>`;
+        html += '</div>';
+        container.innerHTML = html;
+      } catch (err) {
+        container.innerHTML = `<p class="error">${err.message}</p>`;
+      }
+    });
+  }
+}
+
+function initCompliance() {
+  const analyzeBtn = document.getElementById('complianceAnalyzeBtn');
+  const refreshBtn = document.getElementById('complianceRefreshBtn');
+  const scanSelect = document.getElementById('complianceScanSelect');
+
+  async function loadScans() {
+    try {
+      const res = await fetch(`${API_BASE}/scan/history?limit=50`);
+      const data = await res.json();
+      if (data.scans) {
+        scanSelect.innerHTML = '<option value="">-- Select a scan --</option>';
+        for (const s of data.scans) {
+          scanSelect.innerHTML += `<option value="${s.id}">${s.target_url?.substring(0, 40)} (${new Date(s.created_at).toLocaleDateString()})</option>`;
+        }
+      }
+    } catch {}
+  }
+
+  if (refreshBtn) refreshBtn.addEventListener('click', loadScans);
+  loadScans();
+
+  if (analyzeBtn) {
+    analyzeBtn.addEventListener('click', async () => {
+      const scanId = scanSelect?.value;
+      const framework = document.getElementById('complianceFramework')?.value;
+      if (!scanId) { showNotification('Please select a scan', 'error'); return; }
+      const container = document.getElementById('complianceResults');
+      container.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Analyzing compliance...</p>';
+      try {
+        const res = await fetch(`${API_BASE}/compliance/analyze/${scanId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ framework: framework || undefined }),
+        });
+        const data = await res.json();
+        if (data.error) { container.innerHTML = `<p class="error">${data.error}</p>`; return; }
+
+        let html = '';
+        if (data.frameworks) {
+          html = '<div style="font-size:0.85rem;">';
+          for (const [fw, report] of Object.entries(data.frameworks)) {
+            if (report.error) continue;
+            const color = report.nonCompliant > 0 ? '#ff6600' : '#00cc66';
+            html += `<div class="card glass" style="margin-bottom:0.5rem;padding:0.5rem;border-left:3px solid ${color};">`;
+            html += `<strong>${fw}</strong> — ${report.summary || ''}<br/>`;
+            html += `<span class="stat-trend ${report.nonCompliant > 0 ? 'danger' : 'up'}">Non-compliant: ${report.nonCompliant}</span>`;
+            html += ` | Accepted Risk: ${report.acceptedRisk}`;
+            html += ` | ${report.totalFindings} total findings`;
+            html += '</div>';
+          }
+          html += '</div>';
+        } else if (data.mappings) {
+          const color = data.nonCompliant > 0 ? '#ff6600' : '#00cc66';
+          html = `<div style="font-size:0.85rem;">
+            <div style="padding:0.5rem;margin-bottom:0.5rem;border-left:3px solid ${color};background:var(--card-bg);border-radius:4px;">
+              <strong>${data.framework}</strong><br/>
+              ${data.summary || ''}<br/>
+              Non-compliant: ${data.nonCompliant} | Accepted Risk: ${data.acceptedRisk} | Review Required: ${data.reviewRequired}
+            </div>`;
+          if (data.mappings && data.mappings.length > 0) {
+            html += '<table class="cyber-table" style="font-size:0.8rem;"><thead><tr><th>Finding</th><th>Severity</th><th>Control</th><th>Status</th></tr></thead><tbody>';
+            for (const m of data.mappings) {
+              for (const c of m.compliance) {
+                html += `<tr>
+                  <td>${m.vuln.title?.substring(0, 30)}</td>
+                  <td><span class="badge ${m.vuln.severity}">${m.vuln.severity}</span></td>
+                  <td>${c.control}</td>
+                  <td><span class="badge ${c.status === 'non_compliant' ? 'badge-error' : 'badge-info'}">${c.status}</span></td>
+                </tr>`;
+              }
+            }
+            html += '</tbody></table>';
+          }
+          html += '</div>';
+        } else {
+          html = `<p>${data.message || 'No data'}</p>`;
+        }
+        container.innerHTML = html;
+      } catch (err) {
+        container.innerHTML = `<p class="error">${err.message}</p>`;
+      }
+    });
+  }
+}
+
+function initDiff() {
+  const scan1 = document.getElementById('diffScan1');
+  const scan2 = document.getElementById('diffScan2');
+  const compareBtn = document.getElementById('diffCompareBtn');
+
+  async function loadScans() {
+    try {
+      const res = await fetch(`${API_BASE}/scan/history?limit=100`);
+      const data = await res.json();
+      if (data.scans) {
+        const opts = data.scans.map(s => `<option value="${s.id}">${s.target_url?.substring(0, 35)} (${new Date(s.created_at).toLocaleDateString()})</option>`).join('');
+        if (scan1) scan1.innerHTML = '<option value="">-- Select scan --</option>' + opts;
+        if (scan2) scan2.innerHTML = '<option value="">-- Select scan --</option>' + opts;
+      }
+    } catch {}
+  }
+  loadScans();
+
+  if (scan1) {
+    scan1.addEventListener('change', async () => {
+      if (scan1.value) {
+        try {
+          const res = await fetch(`${API_BASE}/results/${scan1.value}/summary`);
+          const data = await res.json();
+          if (data.scan) {
+            document.getElementById('diffScan1Info').innerHTML = `
+              Risk: ${data.scan.risk_score}/100 | Vulns: ${data.scan.total_vulnerabilities} | ${new Date(data.scan.created_at).toLocaleDateString()}
+            `;
+          }
+        } catch {}
+      }
+    });
+  }
+
+  if (scan2) {
+    scan2.addEventListener('change', async () => {
+      if (scan2.value) {
+        try {
+          const res = await fetch(`${API_BASE}/results/${scan2.value}/summary`);
+          const data = await res.json();
+          if (data.scan) {
+            document.getElementById('diffScan2Info').innerHTML = `
+              Risk: ${data.scan.risk_score}/100 | Vulns: ${data.scan.total_vulnerabilities} | ${new Date(data.scan.created_at).toLocaleDateString()}
+            `;
+          }
+        } catch {}
+      }
+    });
+  }
+
+  if (compareBtn) {
+    compareBtn.addEventListener('click', async () => {
+      if (!scan1?.value || !scan2?.value) {
+        showNotification('Please select two scans to compare', 'error');
+        return;
+      }
+      if (scan1.value === scan2.value) {
+        showNotification('Please select two different scans', 'error');
+        return;
+      }
+      const container = document.getElementById('diffResults');
+      container.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Comparing scans...</p>';
+      try {
+        const res = await fetch(`${API_BASE}/diff/compare?scanId1=${scan1.value}&scanId2=${scan2.value}`);
+        const data = await res.json();
+        if (data.error) { container.innerHTML = `<p class="error">${data.error}</p>`; return; }
+
+        const riskColor = data.diff.riskChange > 0 ? '#ff4444' : data.diff.riskChange < 0 ? '#00cc66' : '#888';
+        let html = `<div class="results-summary" style="margin-bottom:0.5rem;">
+          <span class="summary-item ${data.diff.newCount > 0 ? 'high' : 'info'}">New: ${data.diff.newCount}</span>
+          <span class="summary-item ${data.diff.fixedCount > 0 ? 'info' : ''}">Fixed: ${data.diff.fixedCount}</span>
+          <span class="summary-item">Unchanged: ${data.diff.unchangedCount}</span>
+          <span class="summary-item" style="border-color:${riskColor};color:${riskColor}">Risk Change: ${data.diff.riskChange > 0 ? '+' : ''}${data.diff.riskChange}</span>
+        </div>`;
+
+        html += '<div style="font-size:0.85rem;">';
+        html += `<div style="margin-bottom:0.3rem;"><strong>Scan 1:</strong> ${data.scan1.targetUrl} — Risk: ${data.scan1.riskScore} (${new Date(data.scan1.date).toLocaleDateString()})</div>`;
+        html += `<div style="margin-bottom:0.5rem;"><strong>Scan 2:</strong> ${data.scan2.targetUrl} — Risk: ${data.scan2.riskScore} (${new Date(data.scan2.date).toLocaleDateString()})</div>`;
+
+        if (data.diff.newFindings.length > 0) {
+          html += '<h4 style="color:#ff4444;margin-top:0.5rem;">New Findings</h4>';
+          for (const v of data.diff.newFindings) {
+            html += `<div style="padding:0.3rem;margin-bottom:0.2rem;border-left:3px solid #ff4444;background:var(--card-bg);">
+              <strong>[${v.severity.toUpperCase()}]</strong> ${v.title}<br/>
+              <span style="color:var(--text-muted);font-size:0.8rem;">${v.type} — ${v.endpoint || ''}</span>
+            </div>`;
+          }
+        }
+
+        if (data.diff.fixedFindings.length > 0) {
+          html += '<h4 style="color:#00cc66;margin-top:0.5rem;">Fixed Findings</h4>';
+          for (const v of data.diff.fixedFindings) {
+            html += `<div style="padding:0.3rem;margin-bottom:0.2rem;border-left:3px solid #00cc66;background:var(--card-bg);">
+              <strong>[${v.severity.toUpperCase()}]</strong> ${v.title}<br/>
+              <span style="color:var(--text-muted);font-size:0.8rem;">${v.type} — ${v.endpoint || ''}</span>
+            </div>`;
+          }
+        }
+
+        if (data.diff.newCount === 0 && data.diff.fixedCount === 0) {
+          html += '<p>No significant changes between these two scans.</p>';
+        }
+
+        html += '</div>';
+        container.innerHTML = html;
+      } catch (err) {
+        container.innerHTML = `<p class="error">${err.message}</p>`;
+      }
+    });
+  }
+}
+
+function initNotifications() {
+  const addBtn = document.getElementById('notifAddBtn');
+  const configsContainer = document.getElementById('notifConfigs');
+
+  async function loadConfigs() {
+    const token = localStorage.getItem('authToken');
+    if (!token) { if (configsContainer) configsContainer.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Login required</p>'; return; }
+    try {
+      const res = await fetch(`${API_BASE}/notifications/configs`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!data.configs || data.configs.length === 0) {
+        configsContainer.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">No webhooks configured</p>';
+        return;
+      }
+      let html = '<table class="cyber-table" style="font-size:0.8rem;"><thead><tr><th>Type</th><th>Name</th><th>URL</th><th>Actions</th></tr></thead><tbody>';
+      for (const c of data.configs) {
+        html += `<tr>
+          <td><span class="badge badge-info">${c.type}</span></td>
+          <td>${c.name}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">${c.webhook_url}</td>
+          <td><button class="btn btn-sm notif-test-btn" data-id="${c.id}" data-type="${c.type}" data-url="${c.webhook_url}"><i class="fas fa-paper-plane"></i></button>
+          <button class="btn btn-sm notif-del-btn" data-id="${c.id}"><i class="fas fa-trash"></i></button></td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      configsContainer.innerHTML = html;
+
+      configsContainer.querySelectorAll('.notif-test-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+          try {
+            const res = await fetch(`${API_BASE}/notifications/test`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ type: btn.dataset.type, webhookUrl: btn.dataset.url }),
+            });
+            const data = await res.json();
+            showNotification(data.message || 'Test sent', data.success ? 'success' : 'error');
+          } catch (err) {
+            showNotification('Test failed: ' + err.message, 'error');
+          }
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+        });
+      });
+
+      configsContainer.querySelectorAll('.notif-del-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try {
+            await fetch(`${API_BASE}/notifications/configs/${btn.dataset.id}`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${token}` },
+            });
+            loadConfigs();
+            showNotification('Webhook deleted', 'success');
+          } catch (err) {
+            showNotification('Delete failed', 'error');
+          }
+        });
+      });
+    } catch {
+      configsContainer.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Failed to load webhooks</p>';
+    }
+  }
+
+  if (addBtn) {
+    addBtn.addEventListener('click', async () => {
+      const token = localStorage.getItem('authToken');
+      if (!token) { showNotification('Login required', 'error'); return; }
+      const type = document.getElementById('notifType')?.value;
+      const name = document.getElementById('notifName')?.value;
+      const url = document.getElementById('notifWebhookUrl')?.value;
+      if (!name || !url) { showNotification('Name and URL required', 'error'); return; }
+      try {
+        const res = await fetch(`${API_BASE}/notifications/configs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ type, name, webhookUrl: url }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          showNotification('Webhook added', 'success');
+          document.getElementById('notifName').value = '';
+          document.getElementById('notifWebhookUrl').value = '';
+          loadConfigs();
+        } else {
+          showNotification(data.error || 'Failed', 'error');
+        }
+      } catch (err) {
+        showNotification('Failed to add webhook', 'error');
+      }
+    });
+  }
+
+  loadConfigs();
+}

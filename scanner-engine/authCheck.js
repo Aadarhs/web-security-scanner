@@ -47,49 +47,52 @@ async function scanAuth(targetUrl, httpClient) {
         remediation: 'Ensure login endpoints implement account lockout, rate limiting, and strong password policies.'
       });
 
-      for (const cred of DEFAULT_CREDENTIALS) {
-        try {
-          const loginResponse = await httpClient.post(targetUrl, 
-            new URLSearchParams({
-              username: cred.user,
-              password: cred.pass,
-              submit: 'Login'
-            }).toString(),
-            {
-              timeout: 10000,
-              headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': process.env.USER_AGENT || 'WebSecurityScanner/1.0'
-              },
-              maxRedirects: 3,
-              validateStatus: status => status < 500
-            }
-          );
-
-          if (loginResponse.status === 302 || 
+      const credResults = await Promise.allSettled(DEFAULT_CREDENTIALS.map(cred =>
+        httpClient.post(targetUrl,
+          new URLSearchParams({
+            username: cred.user,
+            password: cred.pass,
+            submit: 'Login'
+          }).toString(),
+          {
+            timeout: 8000,
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'User-Agent': process.env.USER_AGENT || 'WebSecurityScanner/1.0'
+            },
+            maxRedirects: 3,
+            validateStatus: status => status < 500
+          }
+        ).then(loginResponse => {
+          if (loginResponse.status === 302 ||
               (loginResponse.data && (
                 loginResponse.data.includes('Welcome') ||
                 loginResponse.data.includes('Dashboard') ||
                 loginResponse.data.includes('Logout') ||
                 !loginResponse.data.includes('Invalid')
               ))) {
-            vulnerabilities.push({
-              type: 'authentication',
-              severity: 'critical',
-              title: 'Default Credentials Accepted',
-              description: `Default credentials ${cred.description} were accepted by the server. This is a critical security flaw.`,
-              endpoint: targetUrl,
-              parameter: 'username, password',
-              payload: `${cred.user}:${cred.pass}`,
-              evidence: `Credentials: ${cred.user} / ${cred.pass}\nHTTP Status: ${loginResponse.status}\nRedirect/Login detected: Successful authentication`,
-              remediation: 'Change all default credentials immediately. Implement mandatory password change on first login. Use strong password policies.',
-              owasp_category: 'A07:2021 – Identification and Authentication Failures',
-              cve_id: 'CWE-798'
-            });
-            break;
+            return { cred, loginResponse };
           }
-        } catch {
-          continue;
+          return null;
+        })
+      ));
+
+      for (const result of credResults) {
+        if (result.status === 'fulfilled' && result.value) {
+          const { cred, loginResponse } = result.value;
+          vulnerabilities.push({
+            type: 'authentication',
+            severity: 'critical',
+            title: 'Default Credentials Accepted',
+            description: `Default credentials ${cred.description} were accepted by the server. This is a critical security flaw.`,
+            endpoint: targetUrl,
+            parameter: 'username, password',
+            payload: `${cred.user}:${cred.pass}`,
+            evidence: `Credentials: ${cred.user} / ${cred.pass}\nHTTP Status: ${loginResponse.status}\nRedirect/Login detected: Successful authentication`,
+            remediation: 'Change all default credentials immediately. Implement mandatory password change on first login. Use strong password policies.',
+            owasp_category: 'A07:2021 – Identification and Authentication Failures',
+            cve_id: 'CWE-798'
+          });
         }
       }
 

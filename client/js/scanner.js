@@ -56,10 +56,15 @@ function initSocket() {
 
     socket.on('scan:progress', (data) => {
       updateProgress(data.progress);
+      updateETA(data.eta);
     });
 
     socket.on('scan:log', (data) => {
       addLogEntry(data.message, data.level, data.module);
+      const currentEl = document.getElementById('currentModule');
+      if (currentEl && data.module && data.module !== 'engine' && data.module !== 'System') {
+        currentEl.textContent = data.module;
+      }
     });
 
     socket.on('scan:complete', (data) => {
@@ -126,6 +131,8 @@ async function startScan() {
   document.getElementById('scanResults').style.display = 'none';
   document.getElementById('progressFill').style.width = '0%';
   document.getElementById('progressText').textContent = '0%';
+  const etaEl = document.getElementById('etaDisplay');
+  if (etaEl) etaEl.textContent = 'Calculating...';
   document.getElementById('scanTargetDisplay').textContent = url;
   document.getElementById('currentModule').textContent = 'Initializing...';
   document.getElementById('foundCount').textContent = '0';
@@ -189,6 +196,16 @@ function updateProgress(progress) {
   if (text) text.textContent = `${progress}%`;
 }
 
+function updateETA(eta) {
+  const el = document.getElementById('etaDisplay');
+  if (!el) return;
+  if (eta === undefined || eta === null) { el.textContent = '--'; return; }
+  if (eta <= 0) { el.textContent = 'Finalizing...'; return; }
+  const m = Math.floor(eta / 60);
+  const s = eta % 60;
+  el.textContent = m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
 function addLogEntry(message, level = 'info', module = 'System') {
   const log = document.getElementById('scanLog');
   if (!log) return;
@@ -204,6 +221,10 @@ function addLogEntry(message, level = 'info', module = 'System') {
 function onScanComplete(data) {
   resetScanButton();
 
+  const etaEl = document.getElementById('etaDisplay');
+  if (etaEl) etaEl.textContent = 'Complete';
+  const modEl = document.getElementById('currentModule');
+  if (modEl) modEl.textContent = 'Done';
   document.getElementById('scanStatusBadge').innerHTML = '<i class="fas fa-check-circle"></i> Completed';
   document.getElementById('scanStatusBadge').className = 'badge completed';
   document.getElementById('progressFill').style.width = '100%';

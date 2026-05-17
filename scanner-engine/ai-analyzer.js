@@ -65,6 +65,8 @@ function generateRemediation(title, type, severity, description, currentRemediat
 }
 
 async function executeLLMAnalysis(prompt, type) {
+  const axios = require('axios');
+
   const { Configuration, OpenAIApi } = (function() {
     try {
       return require('openai');

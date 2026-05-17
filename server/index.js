@@ -43,9 +43,22 @@ app.use('/api/reports', reportsRoutes);
 const aiRoutes = require('./routes/ai');
 const adminRoutes = require('./routes/admin');
 const pentestRoutes = require('./routes/pentest');
+const techDetectRoutes = require('./routes/tech-detect');
+const dnsSecurityRoutes = require('./routes/dns-security');
+const complianceRoutes = require('./routes/compliance');
+const breachCheckRoutes = require('./routes/breach-check');
+const diffRoutes = require('./routes/diff');
+const notificationRoutes = require('./routes/notifications-route');
+
 app.use('/api/ai', aiRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/pentest', pentestRoutes);
+app.use('/api/tech-detect', techDetectRoutes);
+app.use('/api/dns-security', dnsSecurityRoutes);
+app.use('/api/compliance', complianceRoutes);
+app.use('/api/breach-check', breachCheckRoutes);
+app.use('/api/diff', diffRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/api/dashboard/stats', (req, res) => {
   const getVal = (query, params, key) => {

@@ -147,6 +147,34 @@ async function init() {
   } catch (e) {
   }
 
+  // Migration: add webhook_configs table
+  try {
+    api.exec("CREATE TABLE IF NOT EXISTS webhook_configs (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, name TEXT NOT NULL, webhook_url TEXT NOT NULL, config_json TEXT, enabled INTEGER DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    api.exec("CREATE INDEX IF NOT EXISTS idx_webhook_type ON webhook_configs(type)");
+  } catch (e) {
+  }
+
+  // Migration: add tech_detections table
+  try {
+    api.exec("CREATE TABLE IF NOT EXISTS tech_detections (id INTEGER PRIMARY KEY AUTOINCREMENT, scan_id TEXT REFERENCES scans(id), technology TEXT NOT NULL, category TEXT, confidence TEXT, version TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    api.exec("CREATE INDEX IF NOT EXISTS idx_tech_scan ON tech_detections(scan_id)");
+  } catch (e) {
+  }
+
+  // Migration: add dns_security table
+  try {
+    api.exec("CREATE TABLE IF NOT EXISTS dns_security (id INTEGER PRIMARY KEY AUTOINCREMENT, scan_id TEXT REFERENCES scans(id), domain TEXT NOT NULL, has_spf INTEGER DEFAULT 0, has_dkim INTEGER DEFAULT 0, has_dmarc INTEGER DEFAULT 0, has_dnssec INTEGER DEFAULT 0, security_score INTEGER DEFAULT 0, issues TEXT, recommendations TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    api.exec("CREATE INDEX IF NOT EXISTS idx_dns_scan ON dns_security(scan_id)");
+  } catch (e) {
+  }
+
+  // Migration: add breach_checks table
+  try {
+    api.exec("CREATE TABLE IF NOT EXISTS breach_checks (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL, breached INTEGER DEFAULT 0, breach_count INTEGER DEFAULT 0, breaches TEXT, checked_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    api.exec("CREATE INDEX IF NOT EXISTS idx_breach_email ON breach_checks(email)");
+  } catch (e) {
+  }
+
   // Save initial database
   saveDb();
 

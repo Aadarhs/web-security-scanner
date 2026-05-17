@@ -28,6 +28,9 @@
       <a href="#reports" class="nav-link"><i class="fas fa-file-lines"></i> Reports</a>
       <a href="#pentest" class="nav-link"><i class="fas fa-crosshairs"></i> Pentest</a>
       <a href="#admin" class="nav-link" id="adminNavLink" style="display:none;"><i class="fas fa-cog"></i> Admin</a>
+      <a href="#osint" class="nav-link"><i class="fas fa-search"></i> OSINT</a>
+      <a href="#compliance" class="nav-link"><i class="fas fa-clipboard-check"></i> Compliance</a>
+      <a href="#diff" class="nav-link"><i class="fas fa-not-equal"></i> Diff</a>
       <a href="#docs" class="nav-link"><i class="fas fa-book"></i> Docs</a>
     </div>
     <div class="nav-actions">
@@ -218,6 +221,10 @@
                 <span>Vulnerabilities Found:</span>
                 <span id="foundCount">0</span>
               </div>
+              <div class="status-row">
+                <span>Estimated Time Remaining:</span>
+                <span id="etaDisplay">--</span>
+              </div>
             </div>
           </div>
         </div>
@@ -339,6 +346,127 @@
       </div>
     </section>
 
+    <!-- OSINT SECTION -->
+    <section id="osint" class="section">
+      <div class="section-header">
+        <h1><i class="fas fa-search"></i> OSINT & Reconnaissance</h1>
+        <p class="section-subtitle">Technology detection, DNS security analysis, and data breach checking</p>
+      </div>
+
+      <div class="dashboard-grid">
+        <!-- Tech Detection -->
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-microchip" style="color:#00f0ff"></i> Technology Stack Detection</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Detect web technologies, frameworks, CDNs, analytics, and hosting providers</p>
+            <div class="input-group" style="display:flex;gap:0.3rem;">
+              <input type="text" id="techUrl" class="cyber-input" placeholder="Target URL (e.g., https://example.com)" style="flex:1" />
+              <button class="btn btn-primary" id="techDetectBtn"><i class="fas fa-microchip"></i> Detect</button>
+            </div>
+            <div id="techResults" class="tool-output" style="margin-top:0.5rem;max-height:400px;overflow-y:auto;"></div>
+          </div>
+        </div>
+
+        <!-- DNS Security -->
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-shield-halved" style="color:#00cc66"></i> DNS Security Analyzer</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Analyze SPF, DKIM, DMARC, DNSSEC, and email security posture</p>
+            <div class="input-group" style="display:flex;gap:0.3rem;">
+              <input type="text" id="dnsDomain" class="cyber-input" placeholder="Domain (e.g., example.com)" style="flex:1" />
+              <button class="btn btn-primary" id="dnsSecurityBtn"><i class="fas fa-shield"></i> Analyze</button>
+            </div>
+            <div id="dnsSecurityResults" class="tool-output" style="margin-top:0.5rem;max-height:400px;overflow-y:auto;"></div>
+          </div>
+        </div>
+
+        <!-- Breach Check -->
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-biohazard" style="color:#ff4444"></i> Data Breach Checker</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Check emails and passwords against HaveIBeenPwned database (k-anonymity API)</p>
+            <input type="email" id="breachEmail" class="cyber-input" placeholder="Email address to check" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary" id="breachEmailBtn" style="margin-bottom:0.5rem;"><i class="fas fa-envelope"></i> Check Email</button>
+            <input type="password" id="breachPassword" class="cyber-input" placeholder="Password to check" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary" id="breachPasswordBtn"><i class="fas fa-key"></i> Check Password</button>
+            <div id="breachResults" class="tool-output" style="margin-top:0.5rem;max-height:400px;overflow-y:auto;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- COMPLIANCE SECTION -->
+    <section id="compliance" class="section">
+      <div class="section-header">
+        <h1><i class="fas fa-clipboard-check"></i> Compliance Reporting</h1>
+        <p class="section-subtitle">Map vulnerabilities to PCI-DSS, HIPAA, SOC2, GDPR, and ISO 27001 controls</p>
+      </div>
+
+      <div class="card glass">
+        <div class="card-header">
+          <h3><i class="fas fa-balance-scale"></i> Compliance Analysis</h3>
+          <div class="card-actions">
+            <button class="btn btn-sm" id="complianceRefreshBtn"><i class="fas fa-sync"></i> Refresh</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="filter-bar">
+            <select id="complianceScanSelect" class="cyber-select" style="margin-right:0.3rem;">
+              <option value="">-- Select a scan --</option>
+            </select>
+            <select id="complianceFramework" class="cyber-select" style="margin-right:0.3rem;">
+              <option value="">All Frameworks</option>
+              <option value="PCI-DSS">PCI-DSS 4.0</option>
+              <option value="HIPAA">HIPAA 2024</option>
+              <option value="SOC2">SOC2 2024</option>
+              <option value="GDPR">GDPR 2018</option>
+              <option value="ISO27001">ISO 27001:2022</option>
+            </select>
+            <button class="btn btn-primary" id="complianceAnalyzeBtn"><i class="fas fa-chart-bar"></i> Analyze</button>
+          </div>
+          <div id="complianceResults" style="margin-top:0.5rem;max-height:600px;overflow-y:auto;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DIFF SECTION -->
+    <section id="diff" class="section">
+      <div class="section-header">
+        <h1><i class="fas fa-not-equal"></i> Scan Comparison</h1>
+        <p class="section-subtitle">Compare two scan results to see what changed</p>
+      </div>
+
+      <div class="dashboard-grid">
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-1"></i> First Scan</h3></div>
+          <div class="card-body">
+            <select id="diffScan1" class="cyber-select" style="width:100%;margin-bottom:0.3rem;">
+              <option value="">-- Select scan --</option>
+            </select>
+            <div id="diffScan1Info" style="font-size:0.85rem;color:var(--text-muted);"></div>
+          </div>
+        </div>
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-2"></i> Second Scan</h3></div>
+          <div class="card-body">
+            <select id="diffScan2" class="cyber-select" style="width:100%;margin-bottom:0.3rem;">
+              <option value="">-- Select scan --</option>
+            </select>
+            <div id="diffScan2Info" style="font-size:0.85rem;color:var(--text-muted);"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card glass" style="margin-top:0.5rem;">
+        <div class="card-header">
+          <h3><i class="fas fa-not-equal"></i> Comparison Results</h3>
+          <button class="btn btn-primary" id="diffCompareBtn"><i class="fas fa-play"></i> Compare</button>
+        </div>
+        <div class="card-body">
+          <div id="diffResults" style="max-height:600px;overflow-y:auto;"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- DOCS SECTION -->
     <section id="docs" class="section">
       <div class="section-header">
@@ -427,6 +555,61 @@
           </ul>
           <p><strong>OWASP Category:</strong> A07:2021 – Identification and Authentication Failures</p>
           <p><strong>Remediation:</strong> Strong password policies, MFA, secure cookie configuration</p>
+        </div>
+      </div>
+
+      <div class="card glass">
+        <div class="card-header">
+          <h3><i class="fas fa-crosshairs"></i> Pentesting Toolkit — How to Test Each Module</h3>
+        </div>
+        <div class="card-body">
+          <p style="margin-bottom:0.75rem;">The <strong>Pentest</strong> tab contains 17 offensive security tools. Below are test targets and example inputs for each module.</p>
+
+          <div style="margin-bottom:1rem;padding:0.75rem;background:rgba(0,240,255,0.05);border-left:3px solid var(--accent);border-radius:4px;">
+            <strong style="color:var(--accent)">Public Test Targets</strong>
+            <ul style="margin-top:0.3rem;font-size:0.85rem;">
+              <li><code>http://testphp.vulnweb.com</code> — Acunetix test site (SQLi, XSS)</li>
+              <li><code>https://juice-shop.herokuapp.com</code> — OWASP Juice Shop (all vulns)</li>
+              <li><code>http://testhtml5.vulnweb.com</code> — XSS testing</li>
+              <li><code>https://public-firing-range.appspot.com</code> — Google XSS Firing Range</li>
+              <li><code>http://testasp.vulnweb.com</code> — SQLi testing</li>
+            </ul>
+          </div>
+
+          <table class="cyber-table" style="font-size:0.8rem;">
+            <thead>
+              <tr><th>Tool</th><th>Input Example</th><th>What It Does</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>SQLi Exploiter</td><td><code>URL: http://testphp.vulnweb.com/artists.php?artist=1<br/>Param: artist</code></td><td>Extracts DB info via UNION-based SQLi</td></tr>
+              <tr><td>Brute Forcer</td><td><code>URL: http://localhost:3000<br/>Endpoint: /api/auth/login<br/>Success: token</code></td><td>Tries common username/password combos</td></tr>
+              <tr><td>Payload Generator</td><td><code>Type: SQLi / XSS / CMDI / LFI / SSRF / Reverse Shell / JWT</code></td><td>Generates attack payloads with descriptions</td></tr>
+              <tr><td>Subdomain Enum</td><td><code>Domain: example.com</code></td><td>DNS brute-force of 50+ common subdomains</td></tr>
+              <tr><td>Port Scanner</td><td><code>Host: scanme.nmap.org</code></td><td>TCP connect scan of 27 common ports</td></tr>
+              <tr><td>Endpoint Fuzzer</td><td><code>URL: http://testphp.vulnweb.com</code></td><td>Discovers hidden paths from 50+ wordlist</td></tr>
+              <tr><td>HTTP Method Fuzz</td><td><code>URL: http://testphp.vulnweb.com</code></td><td>Tests 9 HTTP methods (GET, PUT, DELETE, TRACE...)</td></tr>
+              <tr><td>DNS Recon</td><td><code>Domain: example.com</code></td><td>Resolves A, AAAA, MX, NS, TXT, SOA, CNAME</td></tr>
+              <tr><td>CVE Search</td><td><code>Search: apache struts2 openssl nginx</code></td><td>Searches NVD for known vulnerabilities</td></tr>
+              <tr><td>Hash Identifier</td><td><code>Hash: 5d41402abc4b2a76b9719d911017c592</code></td><td>Detects 25+ hash types (MD5, SHA1, bcrypt, NTLM...)</td></tr>
+              <tr><td>Whois Lookup</td><td><code>Domain: example.com</code></td><td>Domain registration & ownership info</td></tr>
+              <tr><td>SSL/TLS Analyzer</td><td><code>Host: example.com<br/>Port: 443</code></td><td>Certificate chain, expiry, cipher, fingerprint</td></tr>
+              <tr><td>CSP Evaluator</td><td><code>URL: https://example.com</code></td><td>Analyzes CSP + security headers</td></tr>
+              <tr><td>Parameter Fuzzer</td><td><code>URL: https://example.com/page</code></td><td>Tests 45+ GET params for response changes</td></tr>
+              <tr><td>Wordlist Generator</td><td><code>Words: admin,root,test</code></td><td>Generates 17x mutated variants per word</td></tr>
+              <tr><td>JWT Decoder</td><td><code>Token: eyJhbGciOiJIUzI1NiIs...</code></td><td>Decodes JWT, detects alg:none, missing exp, admin claims</td></tr>
+              <tr><td>Email Extractor</td><td><code>URL: https://example.com</code></td><td>Extracts emails + external links from page</td></tr>
+            </tbody>
+          </table>
+
+          <div style="margin-top:0.75rem;padding:0.5rem;background:rgba(0,204,102,0.05);border-left:3px solid var(--success);border-radius:4px;">
+            <strong style="color:var(--success)">Quick Test Workflow</strong>
+            <ol style="margin-top:0.3rem;font-size:0.85rem;padding-left:1.2rem;">
+              <li>Click <strong>Pentest</strong> in the nav bar</li>
+              <li>Enter the target URL / domain / hash in any tool card</li>
+              <li>Click the tool's action button (e.g. <em>"Exploit SQLi"</em>, <em>"Scan Ports"</em>)</li>
+              <li>Results appear in the terminal-style output box below each tool</li>
+            </ol>
+          </div>
         </div>
       </div>
     </section>
@@ -525,7 +708,7 @@
           <div class="card-header"><h3><i class="fas fa-globe" style="color:#00cc66"></i> DNS Reconnaissance</h3></div>
           <div class="card-body">
             <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Resolve A, AAAA, MX, NS, TXT, SOA, CNAME records</p>
-            <input type="text" id="dnsDomain" class="cyber-input" placeholder="Domain (e.g., example.com)" style="width:100%;margin-bottom:0.3rem;" />
+            <input type="text" id="dnsDomainPentest" class="cyber-input" placeholder="Domain (e.g., example.com)" style="width:100%;margin-bottom:0.3rem;" />
             <button class="btn btn-primary btn-sm" id="dnsBtn"><i class="fas fa-search"></i> DNS Lookup</button>
             <div id="dnsResults" class="tool-output" style="margin-top:0.5rem;"></div>
           </div>
@@ -621,6 +804,28 @@
             <div id="emailResults" class="tool-output" style="margin-top:0.5rem;"></div>
           </div>
         </div>
+
+        <div class="card glass" style="grid-column: span 2;">
+          <div class="card-header"><h3><i class="fas fa-flask" style="color:#ffcc00"></i> Payload Library Browser</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Browse, search, and copy attack payloads organized by vulnerability type</p>
+            <div class="filter-bar">
+              <select id="payloadLibraryType" class="cyber-select" style="margin-right:0.3rem;">
+                <option value="all">All Types</option>
+                <option value="sqli">SQL Injection</option>
+                <option value="xss">XSS</option>
+                <option value="cmdi">Command Injection</option>
+                <option value="lfi">LFI</option>
+                <option value="ssrf">SSRF</option>
+                <option value="jwt">JWT Attacks</option>
+                <option value="reverse-shell">Reverse Shells</option>
+              </select>
+              <input type="text" id="payloadLibrarySearch" class="cyber-input-sm" placeholder="Search payloads..." style="flex:1;" />
+              <span id="payloadLibraryCount" style="font-size:0.8rem;color:var(--text-muted);margin-left:0.3rem;">0 payloads</span>
+            </div>
+            <div id="payloadLibraryResults" class="tool-output" style="margin-top:0.3rem;max-height:500px;overflow-y:auto;"></div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -672,6 +877,27 @@
           </div>
         </div>
       </div>
+
+      <div class="card glass" style="margin-top:1rem;">
+        <div class="card-header">
+          <h3><i class="fas fa-bell"></i> Notifications & Webhooks</h3>
+        </div>
+        <div class="card-body">
+          <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Configure webhook notifications for scan completion events (Slack, Discord, Email, Custom)</p>
+          <div class="filter-bar" style="margin-bottom:0.5rem;">
+            <select id="notifType" class="cyber-select" style="margin-right:0.3rem;">
+              <option value="slack">Slack</option>
+              <option value="discord">Discord</option>
+              <option value="email">Email (SMTP)</option>
+              <option value="webhook">Custom Webhook</option>
+            </select>
+            <input type="text" id="notifName" class="cyber-input-sm" placeholder="Name" style="width:120px;margin-right:0.3rem;" />
+            <input type="text" id="notifWebhookUrl" class="cyber-input-sm" placeholder="Webhook URL / SMTP config" style="flex:1;margin-right:0.3rem;" />
+            <button class="btn btn-sm" id="notifAddBtn"><i class="fas fa-plus"></i> Add</button>
+          </div>
+          <div id="notifConfigs" style="margin-top:0.5rem;"></div>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -708,9 +934,9 @@
     </div>
   </div>
 
-  <script src="js/app.js"></script>
-  <script src="js/scanner.js"></script>
-  <script src="js/auth.js"></script>
-  <script src="js/pentest.js"></script>
+  <script src="js/app.js?v=2.3.0"></script>
+  <script src="js/scanner.js?v=2.3.0"></script>
+  <script src="js/auth.js?v=2.3.0"></script>
+  <script src="js/pentest.js?v=2.3.0"></script>
 </body>
 </html>

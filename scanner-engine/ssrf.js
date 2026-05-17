@@ -20,39 +20,47 @@ async function scanSSRF(targetUrl, httpClient) {
   const baseUrl = targetUrl.replace(/\/$/, '');
 
   for (const param of SSRF_PARAMS) {
-    for (const test of SSRF_PAYLOADS) {
-      try {
-        const testUrl = `${baseUrl}?${param}=${encodeURIComponent(test.payload)}`;
-        const response = await httpClient.get(testUrl, {
-          timeout: 10000,
-          headers: { 'User-Agent': process.env.USER_AGENT || 'WebSecurityScanner/1.0' },
-          validateStatus: s => s < 500,
-        });
-        const body = typeof response.data === 'string' ? response.data : JSON.stringify(response.data || '');
-        const isMetaData = test.payload.includes('meta-data') || test.payload.includes('user-data');
-        const hasMetaData = isMetaData && (body.includes('ami-id') || body.includes('instance-id') || body.includes('hostname') || body.includes('meta-data'));
-        const hasPasswd = test.payload.includes('/etc/passwd') && body.includes('root:');
-        const hasWinIni = test.payload.includes('win.ini') && body.includes('[fonts]');
-        const hasResponse = body.length > 0 && body.length < 50000;
+    let found = false;
+    const CHUNK_SIZE = 5;
+    for (let i = 0; i < SSRF_PAYLOADS.length; i += CHUNK_SIZE) {
+      if (found) break;
+      const chunk = SSRF_PAYLOADS.slice(i, i + CHUNK_SIZE);
+      const results = await Promise.all(chunk.map(test =>
+        (async () => {
+          try {
+            const testUrl = `${baseUrl}?${param}=${encodeURIComponent(test.payload)}`;
+            const response = await httpClient.get(testUrl, {
+              timeout: 8000,
+              headers: { 'User-Agent': process.env.USER_AGENT || 'WebSecurityScanner/1.0' },
+              validateStatus: s => s < 500,
+            });
+            const body = typeof response.data === 'string' ? response.data : JSON.stringify(response.data || '');
+            const isMetaData = test.payload.includes('meta-data') || test.payload.includes('user-data');
+            const hasMetaData = isMetaData && (body.includes('ami-id') || body.includes('instance-id') || body.includes('hostname') || body.includes('meta-data'));
+            const hasPasswd = test.payload.includes('/etc/passwd') && body.includes('root:');
+            const hasWinIni = test.payload.includes('win.ini') && body.includes('[fonts]');
 
-        if (hasMetaData || hasPasswd || hasWinIni) {
-          vulnerabilities.push({
-            type: 'ssrf',
-            severity: test.severity,
-            title: `Server-Side Request Forgery (SSRF) - ${test.name}`,
-            description: `Parameter "${param}" appears to make requests to user-controlled URLs. This can be used to access internal services.`,
-            endpoint: baseUrl,
-            parameter: param,
-            payload: `${param}=${test.payload}`,
-            evidence: `Test URL: ${testUrl}\nParameter: ${param}\nPayload: ${test.payload}\nResponse length: ${body.length}\nIndicator matched in response`,
-            remediation: 'Use an allowlist of permitted URLs/protocols. Disable unnecessary URL schemes (file://, dict://, gopher://). Validate and sanitize all URL parameters. Use a dedicated URL parser.',
-            owasp_category: 'A10:2021 – Server-Side Request Forgery (SSRF)',
-            cve_id: 'CWE-918',
-          });
-          break;
-        }
-      } catch (err) {
-        continue;
+            if (hasMetaData || hasPasswd || hasWinIni) {
+              return {
+                type: 'ssrf',
+                severity: test.severity,
+                title: `Server-Side Request Forgery (SSRF) - ${test.name}`,
+                description: `Parameter "${param}" appears to make requests to user-controlled URLs. This can be used to access internal services.`,
+                endpoint: baseUrl,
+                parameter: param,
+                payload: `${param}=${test.payload}`,
+                evidence: `Test URL: ${testUrl}\nParameter: ${param}\nPayload: ${test.payload}\nResponse length: ${body.length}\nIndicator matched in response`,
+                remediation: 'Use an allowlist of permitted URLs/protocols. Disable unnecessary URL schemes (file://, dict://, gopher://). Validate and sanitize all URL parameters. Use a dedicated URL parser.',
+                owasp_category: 'A10:2021 – Server-Side Request Forgery (SSRF)',
+                cve_id: 'CWE-918',
+              };
+            }
+          } catch (err) {}
+          return null;
+        })()
+      ));
+      for (const r of results) {
+        if (r) { vulnerabilities.push(r); found = true; break; }
       }
     }
   }
