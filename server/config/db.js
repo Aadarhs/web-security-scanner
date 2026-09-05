@@ -20,6 +20,8 @@ function dbg(...args) {
 }
 
 const api = {
+  _dirty: false,
+
   exec(sql) {
     dbg('exec', sql.substring(0, 60));
     this._db.exec(sql);
@@ -28,58 +30,65 @@ const api = {
   prepare(sql) {
     dbg('prepare', sql.substring(0, 60));
     const self = this;
-    const stmt = self._db.prepare(sql);
 
+    // sql.js export() (via saveDb) closes ALL open statements, so prepared
+    // statements can never be safely reused across calls. Re-prepare and free
+    // per invocation to stay immune to statement closure.
     const wrapper = {
       _sql: sql,
 
       get(...params) {
+        let s = null;
         try {
+          s = self._db.prepare(wrapper._sql);
           if (params.length > 0) {
-            stmt.bind(params);
+            s.bind(params);
           }
-          if (stmt.step()) {
-            const result = stmt.getAsObject();
+          if (s.step()) {
+            const result = s.getAsObject();
             return result && typeof result === 'object' ? result : undefined;
           }
           return undefined;
         } catch (e) {
           return undefined;
         } finally {
-          stmt.reset();
+          if (s) {
+            try { s.free(); } catch (e) {}
+          }
         }
       },
 
       all(...params) {
+        const results = [];
+        let s = null;
         try {
-          const results = [];
+          s = self._db.prepare(wrapper._sql);
           if (params.length > 0) {
-            stmt.bind(params);
+            s.bind(params);
           }
-          while (stmt.step()) {
-            results.push(stmt.getAsObject());
+          while (s.step()) {
+            results.push(s.getAsObject());
           }
           return results;
         } finally {
-          stmt.reset();
+          if (s) {
+            try { s.free(); } catch (e) {}
+          }
         }
       },
 
       run(...params) {
-        // sql.js export() (via saveDb) closes ALL open statements, so a prepared
-        // statement cannot be reused across writes. Re-prepare per invocation.
-        let fresh = null;
+        let s = null;
         try {
-          fresh = self._db.prepare(wrapper._sql);
+          s = self._db.prepare(wrapper._sql);
           if (params.length > 0) {
-            fresh.bind(params);
-            fresh.step();
-          } else {
-            fresh.step();
+            s.bind(params);
           }
+          s.step();
           // Persist to disk after successful writes
           const result = { changes: self._db.getRowsModified() };
           if (result.changes > 0) {
+            api._dirty = true;
             saveDb();
           }
           return result;
@@ -87,10 +96,9 @@ const api = {
           console.error('[DB] Statement error:', e && e.message || e);
           return { changes: 0, error: e.message };
         } finally {
-          if (fresh) {
-            try { fresh.free(); } catch (e) {}
+          if (s) {
+            try { s.free(); } catch (e) {}
           }
-          try { stmt.reset(); } catch (e) {}
         }
       },
     };
@@ -126,17 +134,39 @@ async function init() {
   const SQL = await initSqlJs();
 
   let buffer = null;
+  let sqlDb = null;
+  let loadError = null;
   try {
     buffer = fs.readFileSync(LOADABLE_DB_PATH);
-  } catch {
-    // No existing database file, will create new
+    sqlDb = new SQL.Database(buffer);
+    // sql.js opens lazily; force validation now so a torn file is detected
+    // here (and quarantined below) instead of failing the first real query.
+    sqlDb.exec("SELECT 'ok'");
+  } catch (e) {
+    // The file exists but can't be loaded (e.g. torn write from a killed or
+    // concurrent serverless instance). Fall back to a fresh database so the
+    // server can always start, and quarantine the bad file.
+    loadError = e;
+    console.warn('[DB] Loading existing database failed, starting fresh:', e.message);
+    if (buffer) {
+      try {
+        fs.renameSync(LOADABLE_DB_PATH, LOADABLE_DB_PATH + '.corrupt.' + Date.now());
+      } catch (ignored) {}
+    }
+    try {
+      sqlDb = new SQL.Database();
+    } catch (e2) {
+      sqlDb = null;
+    }
   }
 
-  const sqlDb = buffer ? new SQL.Database(buffer) : new SQL.Database();
+  if (!sqlDb) {
+    throw new Error('Failed to create in-memory database: ' + (loadError && loadError.message || 'unknown'));
+  }
+
   api._db = sqlDb;
 
-  // Enable WAL mode - sql.js doesn't support pragmas the same way
-  api.exec('PRAGMA journal_mode=WAL');
+  // sql.js doesn't implement PRAGMA journal_mode/WAL; keep the DB in-memory.
   api.exec('PRAGMA foreign_keys=ON');
 
   // Run schema
@@ -201,15 +231,24 @@ function saveDb() {
   if (api._db) {
     try {
       const data = api._db.export();
-      fs.writeFileSync(WRITABLE_DB_PATH, Buffer.from(data));
+      const outPath = WRITABLE_DB_PATH;
+      // Write to a temp file then rename so readers never observe a torn file.
+      const tmpPath = outPath + '.tmp';
+      fs.writeFileSync(tmpPath, Buffer.from(data));
+      fs.renameSync(tmpPath, outPath);
     } catch (err) {
       console.error('[DB] Save error:', err.message);
     }
   }
 }
 
-// Auto-save periodically
-setInterval(saveDb, 5000);
+// Auto-save periodically (only when something changed this interval)
+setInterval(() => {
+  if (api._dirty) {
+    api._dirty = false;
+    saveDb();
+  }
+}, 5000);
 process.on('exit', saveDb);
 process.on('SIGINT', () => { saveDb(); process.exit(); });
 process.on('SIGTERM', () => { saveDb(); process.exit(); });
