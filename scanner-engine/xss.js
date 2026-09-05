@@ -1,4 +1,8 @@
+'use strict';
+
 const { XSS_PAYLOADS_ENHANCED } = require('./payload-expansion');
+const { mkFinding, CONFIDENCE } = require('./evidence');
+
 const XSS_PAYLOADS = XSS_PAYLOADS_ENHANCED;
 
 async function testXSSPayload(targetUrl, httpClient, test) {
@@ -8,42 +12,34 @@ async function testXSSPayload(targetUrl, httpClient, test) {
   try {
     const response = await httpClient.get(url, {
       timeout: 8000,
-      headers: { 'User-Agent': process.env.USER_AGENT || 'WebSecurityScanner/1.0' }
+      headers: { 'User-Agent': process.env.USER_AGENT || 'WebSecurityScanner/1.0' },
     });
 
     const body = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-    const lower = body.toLowerCase();
 
-    if (body.includes(test.payload) && !body.includes(test.payload.replace(/</g, '&lt;').replace(/>/g, '&gt;'))) {
-      return [{
+    const reflectedRaw = body.includes(test.payload);
+    const reflectedEncoded = body.includes(
+      test.payload
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+    );
+
+    if (reflectedRaw && !reflectedEncoded) {
+      return [mkFinding('xss', {
         type: 'xss',
-        severity: test.type === 'stored' ? 'critical' : 'high',
-        title: `${test.type === 'dom' ? 'DOM-based' : 'Reflected'} XSS Vulnerability`,
-        description: `Cross-Site Scripting (XSS) detected via ${test.description}. Payload reflected without sanitization.`,
+        severity: 'medium',
+        confidence: CONFIDENCE.POTENTIAL,
+        title: 'Possible Reflected XSS - Payload Returned Unencoded (Verify)',
+        description: `An XSS test payload was returned in the response without visible HTML encoding (${test.description}). This is a strong signal but not conclusive: whether it executes depends on the surrounding HTML context and the parser. Manual verification is required.`,
         endpoint: targetUrl,
         parameter: 'q, search, s',
         payload: test.payload,
-        evidence: `Payload found in response: ${test.payload}\nXSS Type: ${test.type}`,
-        remediation: 'Implement Content Security Policy (CSP). Use context-aware output encoding.',
+        evidence: `Payload found raw in response: ${test.payload}\nXSS vector type: ${test.type}\nNote: verify the surrounding HTML context before treating as exploitable`,
+        remediation: 'Use context-aware output encoding and a Content Security Policy (CSP).',
         owasp_category: 'A03:2021 – Injection',
-        cve_id: 'CWE-79'
-      }];
-    }
-
-    if (test.payload.toLowerCase().includes('<script') && lower.includes('alert(1)')) {
-      return [{
-        type: 'xss',
-        severity: 'high',
-        title: 'Potential Reflected XSS',
-        description: `JavaScript execution context detected. ${test.description}`,
-        endpoint: targetUrl,
-        parameter: 'q, search, s',
-        payload: test.payload,
-        evidence: 'alert(1) found in response body - possible XSS',
-        remediation: 'Apply context-dependent encoding. Use frameworks with auto-escaping.',
-        owasp_category: 'A03:2021 – Injection',
-        cve_id: 'CWE-79'
-      }];
+        cve_id: 'CWE-79',
+      })];
     }
 
     return [];
@@ -54,13 +50,20 @@ async function testXSSPayload(targetUrl, httpClient, test) {
 
 async function scanXSS(targetUrl, httpClient) {
   const vulnerabilities = [];
+  const seen = new Set();
   const results = await Promise.allSettled(
     XSS_PAYLOADS.map(test => testXSSPayload(targetUrl, httpClient, test))
   );
 
   for (const result of results) {
     if (result.status === 'fulfilled' && result.value.length > 0) {
-      vulnerabilities.push(...result.value);
+      for (const v of result.value) {
+        const key = `xss::${v.payload}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          vulnerabilities.push(v);
+        }
+      }
     }
   }
 

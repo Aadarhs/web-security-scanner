@@ -219,22 +219,6 @@ async function scanNetwork(targetUrl, httpClient) {
     }
   }
 
-  if (openPorts.length === 0) {
-    vulnerabilities.push({
-      type: 'network',
-      severity: 'info',
-      title: 'Network Scan Complete - No Open Ports Found',
-      description: `No common ports were found open on ${host}. This indicates good network security posture.`,
-      endpoint: host,
-      parameter: 'N/A',
-      payload: 'TCP Port Scan of 20 common ports',
-      evidence: `Host: ${host}\nPorts scanned: ${COMMON_PORTS.length}\nOpen ports: 0\nAll common ports appear closed or filtered.`,
-      remediation: 'Continue monitoring ports and maintain firewall rules.',
-      owasp_category: 'A05:2021 – Security Misconfiguration',
-      cve_id: 'CWE-200',
-    });
-  }
-
   return vulnerabilities;
 }
 

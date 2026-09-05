@@ -112,7 +112,7 @@ describe('scanDirectory', () => {
 
     const results = await scanDirectory('https://example.com', httpClient);
     const forbiddenFindings = results.filter(r =>
-      r.title.startsWith('Access Denied') && r.title.includes('Admin')
+      r.title.includes('Access Control / WAF Detected') && r.endpoint === 'https://example.com'
     );
     expect(forbiddenFindings.length).toBeGreaterThanOrEqual(1);
     expect(forbiddenFindings[0].severity).toBe('info');

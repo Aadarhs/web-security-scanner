@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS vulnerabilities (
   owasp_category TEXT,
   ignored INTEGER DEFAULT 0,
   ignored_reason TEXT,
+  confidence TEXT DEFAULT 'confirmed',
+  module TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

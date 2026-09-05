@@ -86,6 +86,8 @@ function ensureScanState(scanId, targetUrl, requestedModules, resumeKeys) {
     vulnerabilities: [],
     startedAt: Date.now(),
     passiveResponse: null,
+    passiveFetchFailed: false,
+    currentModule: null,
     loadLogged: false,
   };
   scanStates.set(scanId, st);
@@ -109,17 +111,22 @@ async function runNextBatch(scanId, targetUrl, onProgress, onLog, onComplete, re
     if (scanCancelled.has(scanId)) return 'cancelled';
 
     onLog(scanId, 'info', `Running ${mod.name} scanner...`, mod.name);
+    st.currentModule = mod.name;
 
     let results = [];
     let timedOut = false;
     try {
       const runModule = async () => {
         if (mod.key === 'passive') {
+          if (st.passiveFetchFailed) {
+            throw new Error('target unreachable - passive scan skipped');
+          }
           if (!st.passiveResponse) {
             try {
               st.passiveResponse = await httpClient.get(st.url, { timeout: 8000, validateStatus: s => s < 500 });
             } catch {
-              st.passiveResponse = { data: '', headers: {} };
+              st.passiveFetchFailed = true;
+              throw new Error('target unreachable - passive scan skipped');
             }
           }
           return mod.module(st.url, st.passiveResponse);
@@ -129,7 +136,14 @@ async function runNextBatch(scanId, targetUrl, onProgress, onLog, onComplete, re
       results = await withTimeout(runModule(), PER_MODULE_TIMEOUT, mod.name);
     } catch (err) {
       timedOut = true;
-      onLog(scanId, 'error', `${mod.name} ${err.message ? ('timed out or failed: ' + err.message) : 'errored'} - skipped`, mod.name);
+      const msg = err && err.message;
+      if (msg && /passive scan skipped|target unreachable/i.test(msg)) {
+        onLog(scanId, 'error', `${mod.name}: ${msg}`, mod.name);
+      } else {
+        onLog(scanId, 'error', `${mod.name} ${msg ? ('timed out or failed: ' + msg) : 'errored'} - skipped`, mod.name);
+      }
+    } finally {
+      st.currentModule = null;
     }
 
     if (!timedOut) {
@@ -163,7 +177,7 @@ async function runNextBatch(scanId, targetUrl, onProgress, onLog, onComplete, re
     onComplete(scanId, st.vulnerabilities, true);
     scanCancelled.delete(scanId);
     scanStates.delete(scanId);
-    return { finished: true, cancelled: true };
+    return { finished: true, cancelled: true, currentModule: null };
   }
 
   const batch = st.modulesToRun.slice(st.index, st.index + MODULE_BATCH_SIZE);
@@ -175,7 +189,7 @@ async function runNextBatch(scanId, targetUrl, onProgress, onLog, onComplete, re
     onComplete(scanId, st.vulnerabilities, true);
     scanCancelled.delete(scanId);
     scanStates.delete(scanId);
-    return { finished: true, cancelled: true };
+    return { finished: true, cancelled: true, currentModule: null };
   }
 
   const finished = st.index >= st.modulesToRun.length;
@@ -203,7 +217,7 @@ async function runNextBatch(scanId, targetUrl, onProgress, onLog, onComplete, re
     scanStates.delete(scanId);
   }
 
-  return { finished, cancelled: false };
+  return { finished, cancelled: false, currentModule: st.currentModule };
 }
 
 function runScan(scanId, targetUrl, onProgress, onLog, onComplete, requestedModules) {

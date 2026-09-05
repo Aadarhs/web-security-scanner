@@ -185,6 +185,16 @@ async function init() {
   } catch (e) {
     // Column already exists - ignore error
   }
+  try {
+    api.exec("ALTER TABLE vulnerabilities ADD COLUMN confidence TEXT DEFAULT 'confirmed'");
+  } catch (e) {
+    // Column already exists - ignore error
+  }
+  try {
+    api.exec("ALTER TABLE vulnerabilities ADD COLUMN module TEXT");
+  } catch (e) {
+    // Column already exists - ignore error
+  }
   // Migration: add scan_metadata table
   try {
     api.exec("CREATE TABLE IF NOT EXISTS scan_metadata (id INTEGER PRIMARY KEY AUTOINCREMENT, scan_id TEXT REFERENCES scans(id), key TEXT NOT NULL, value TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");

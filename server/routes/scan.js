@@ -59,8 +59,8 @@ function makeCallbacks(req, socketId) {
   };
 
   const insertVuln = db.prepare(`
-    INSERT INTO vulnerabilities (scan_id, type, severity, title, description, endpoint, parameter, payload, evidence, remediation, owasp_category, cve_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO vulnerabilities (scan_id, type, severity, title, description, endpoint, parameter, payload, evidence, remediation, owasp_category, cve_id, confidence, module)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const onModuleResult = (id, moduleKey, results) => {
@@ -68,7 +68,7 @@ function makeCallbacks(req, socketId) {
     const created = [];
     for (const v of (results || [])) {
       try {
-        insertVuln.run(id, v.type, v.severity, v.title, v.description, v.endpoint, v.parameter, v.payload, v.evidence, v.remediation, v.owasp_category, v.cve_id);
+        insertVuln.run(id, v.type, v.severity, v.title, v.description, v.endpoint, v.parameter, v.payload, v.evidence, v.remediation, v.owasp_category, v.cve_id, v.confidence || 'confirmed', v.module || moduleKey);
         created.push(v);
       } catch (e) {}
     }
@@ -130,13 +130,14 @@ router.post('/:id/step', optionalAuth, async (req, res) => {
       .map(r => r.key.replace('done:', ''));
 
     const callbacks = makeCallbacks(req, req.body?.socketId || null);
-    const { finished, cancelled } = await runNextBatch(id, scan.target_url, callbacks.onProgress, callbacks.onLog, callbacks.onComplete, requestedModules, doneKeys, callbacks.onModuleResult);
+    const { finished, cancelled, currentModule } = await runNextBatch(id, scan.target_url, callbacks.onProgress, callbacks.onLog, callbacks.onComplete, requestedModules, doneKeys, callbacks.onModuleResult);
     const updated = db.prepare('SELECT status, progress FROM scans WHERE id = ?').get(id);
     res.json({
       scanId: id,
       status: cancelled ? 'cancelled' : (updated ? updated.status : 'running'),
       progress: updated ? (updated.progress ?? 0) : 0,
       done: finished || cancelled,
+      currentModule: currentModule || null,
     });
   } catch (e) {
     res.status(500).json({ error: 'Scan step failed: ' + e.message });
