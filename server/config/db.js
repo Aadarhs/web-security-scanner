@@ -4,6 +4,10 @@ const fs = require('fs');
 const DB_PATH = path.resolve(__dirname, '..', '..', 'database', 'scanner.db');
 const SCHEMA_PATH = path.join(__dirname, '..', '..', 'database', 'schema.sql');
 const DB_DIR = path.dirname(DB_PATH);
+const IS_SERVERLESS = process.env.VERCEL === '1';
+const WRITABLE_DB_PATH = IS_SERVERLESS ? '/tmp/scanner.db' : DB_PATH;
+const LOADABLE_DB_PATH =
+  IS_SERVERLESS && fs.existsSync('/tmp/scanner.db') ? '/tmp/scanner.db' : DB_PATH;
 
 if (!fs.existsSync(DB_DIR)) {
   fs.mkdirSync(DB_DIR, { recursive: true });
@@ -107,12 +111,12 @@ const api = {
 async function init() {
   if (db) return db;
 
-  const initSqlJs = require('sql.js');
+  const initSqlJs = require('sql.js/dist/sql-asm.js');
   const SQL = await initSqlJs();
 
   let buffer = null;
   try {
-    buffer = fs.readFileSync(DB_PATH);
+    buffer = fs.readFileSync(LOADABLE_DB_PATH);
   } catch {
     // No existing database file, will create new
   }
@@ -186,7 +190,7 @@ function saveDb() {
   if (api._db) {
     try {
       const data = api._db.export();
-      fs.writeFileSync(DB_PATH, Buffer.from(data));
+      fs.writeFileSync(WRITABLE_DB_PATH, Buffer.from(data));
     } catch (err) {
       console.error('[DB] Save error:', err.message);
     }

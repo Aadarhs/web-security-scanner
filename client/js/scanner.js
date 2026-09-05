@@ -1,6 +1,7 @@
 let socket = null;
 let currentScanId = null;
 let foundVulnerabilities = [];
+let pollTimer = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   initSocket();
@@ -73,11 +74,18 @@ function initSocket() {
 
     socket.on('disconnect', () => {
       console.log('[Socket] Disconnected');
+      if (currentScanId && !pollTimer) {
+        addLogEntry('Live feed lost - switching to polling status', 'warning', 'System');
+        startPolling(currentScanId);
+      }
     });
 
     socket.on('connect_error', (err) => {
       console.log('[Socket] Connection error:', err.message);
       addLogEntry('WebSocket disconnected - polling mode active', 'warning', 'System');
+      if (currentScanId && !pollTimer) {
+        startPolling(currentScanId);
+      }
     });
   } catch (err) {
     console.log('[Socket] Init error:', err.message);
@@ -182,6 +190,11 @@ async function startScan() {
     currentScanId = data.scanId;
     addLogEntry(`Scan initialized: ${data.scanId?.substring(0, 8)}...`, 'success', 'System');
     addLogEntry('Assessment in progress...', 'info', 'System');
+
+    if (!(socket && socket.connected)) {
+      addLogEntry('Live feed unavailable - polling scan status', 'warning', 'System');
+      startPolling(data.scanId);
+    }
   } catch (err) {
     addLogEntry(`Failed to start scan: ${err.message}`, 'error', 'System');
     showNotification(`Failed to start scan: ${err.message}`, 'error');
@@ -219,6 +232,7 @@ function addLogEntry(message, level = 'info', module = 'System') {
 }
 
 function onScanComplete(data) {
+  stopPolling();
   resetScanButton();
 
   const etaEl = document.getElementById('etaDisplay');
@@ -264,4 +278,48 @@ function resetScanButton() {
   const btn = document.getElementById('startScanBtn');
   btn.disabled = false;
   btn.innerHTML = '<i class="fas fa-bolt"></i> Start Scan';
+}
+
+function startPolling(scanId) {
+  stopPolling();
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/scan/${scanId}/status`);
+      const d = await res.json();
+      if (d.error) return;
+
+      if (typeof d.progress === 'number') {
+        updateProgress(d.progress);
+      }
+
+      const logEl = document.getElementById('scanLog');
+      const offset = logEl ? logEl.children.length : 0;
+      (d.logs || []).slice(offset).forEach((l) => {
+        addLogEntry(l.message, l.level, l.module || 'engine');
+      });
+
+      if (d.status === 'running' || d.status === 'queued' || d.status === 'pending') return;
+
+      stopPolling();
+      if (d.status === 'completed') {
+        onScanComplete({
+          scanId,
+          vulnerabilities: d.vulnerabilities || [],
+          counts: d.counts || { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+        });
+      } else {
+        resetScanButton();
+        showNotification(`Scan ${d.status}`, 'info');
+      }
+    } catch (e) {
+      // Transient network error - keep polling
+    }
+  }, 2000);
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
 }

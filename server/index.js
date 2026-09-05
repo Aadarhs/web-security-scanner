@@ -1,4 +1,6 @@
-require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+try {
+  require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+} catch (e) {}
 
 const express = require('express');
 const http = require('http');
@@ -133,19 +135,31 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'client', 'index.html'));
 });
 
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
+async function ensureAdmin() {
+  const bcrypt = require('bcryptjs');
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL);
+  if (!existing) {
+    const hashed = bcrypt.hashSync(ADMIN_PASSWORD, 12);
+    db.prepare('INSERT INTO users (email, password, name, role) VALUES (?, ?, ?, ?)').run(ADMIN_EMAIL, hashed, 'Admin', 'admin');
+    console.log(`[Setup] Admin user created: ${ADMIN_EMAIL}`);
+  }
+  db.save();
+}
+
+async function startup() {
+  await db.init();
+  await ensureAdmin();
+}
+
+app.startup = startup;
+
 const PORT = process.env.PORT || 3000;
 
 async function start() {
-  await db.init();
-
-  const bcrypt = require('bcryptjs');
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(process.env.ADMIN_EMAIL);
-  if (!existing) {
-    const hashed = bcrypt.hashSync(process.env.ADMIN_PASSWORD, 12);
-    db.prepare('INSERT INTO users (email, password, name, role) VALUES (?, ?, ?, ?)').run(process.env.ADMIN_EMAIL, hashed, 'Admin', 'admin');
-    console.log(`[Setup] Admin user created: ${process.env.ADMIN_EMAIL}`);
-  }
-  
+  await startup();
   server.listen(PORT, () => {
     console.log(`\x1b[36m`);
     console.log(`  ╔═══════════════════════════════════════════╗`);
@@ -157,7 +171,11 @@ async function start() {
   });
 }
 
-start().catch(err => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  start().catch(err => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = app;

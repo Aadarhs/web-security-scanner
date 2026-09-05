@@ -126,4 +126,46 @@ router.get('/recent', (req, res) => {
   res.json(scans);
 });
 
+router.get('/:id/status', (req, res) => {
+  const { id } = req.params;
+
+  let scan;
+  try {
+    scan = db.prepare('SELECT * FROM scans WHERE id = ?').get(id);
+  } catch (e) {
+    return res.status(500).json({ error: 'Could not load scan' });
+  }
+  if (!scan) return res.status(404).json({ error: 'Scan not found' });
+
+  let logs = [];
+  try {
+    logs = db.prepare('SELECT level, message, module, created_at AS timestamp FROM scan_logs WHERE scan_id = ? ORDER BY id ASC LIMIT 500').all(id);
+  } catch (e) {}
+
+  let vulnerabilities = [];
+  if (scan.status === 'completed') {
+    try {
+      vulnerabilities = db.prepare('SELECT * FROM vulnerabilities WHERE scan_id = ?').all(id);
+    } catch (e) {}
+  }
+
+  const counts = severityCounts(vulnerabilities);
+
+  res.json({
+    id,
+    status: scan.status,
+    progress: scan.progress ?? (scan.status === 'completed' ? 100 : 0),
+    total_vulnerabilities: vulnerabilities.length,
+    risk_score: scan.risk_score || 0,
+    counts,
+    logs,
+    vulnerabilities: scan.status === 'completed' ? vulnerabilities : [],
+    scan: {
+      target_url: scan.target_url,
+      created_at: scan.created_at,
+      completed_at: scan.completed_at,
+    },
+  });
+});
+
 module.exports = router;
