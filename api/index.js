@@ -13,3 +13,5 @@ module.exports = async function handler(req, res) {
     }
   }
 };
+
+module.exports.config = { maxDuration: 60 };
