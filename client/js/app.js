@@ -114,7 +114,7 @@ function initNavigation() {
     const target = document.getElementById(id);
     if (target) {
       target.classList.add('active');
-      document.querySelector(`.nav-link[href="#${id}"]`)?.classList.add('active');
+      document.querySelectorAll(`.nav-link[href="#${id}"]`).forEach(l => l.classList.add('active'));
       window.location.hash = id;
     }
 
@@ -138,6 +138,24 @@ function initNavigation() {
     const id = window.location.hash.substring(1) || 'dashboard';
     showSection(id);
   });
+
+  const navToggle = document.getElementById('navToggle');
+  const navMobile = document.getElementById('navMobile');
+  if (navToggle && navMobile) {
+    navToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      const open = navMobile.classList.toggle('open');
+      navToggle.setAttribute('aria-expanded', String(open));
+      navToggle.querySelector('i').className = open ? 'fas fa-times' : 'fas fa-bars';
+    });
+    navMobile.querySelectorAll('.nav-link').forEach((l) => {
+      l.addEventListener('click', () => {
+        navMobile.classList.remove('open');
+        navToggle.setAttribute('aria-expanded', 'false');
+        navToggle.querySelector('i').className = 'fas fa-bars';
+      });
+    });
+  }
 }
 
 function filterCveList(query) {
@@ -888,7 +906,10 @@ function checkAdminAccess() {
     headers: { 'Authorization': `Bearer ${token}` },
   }).then(res => res.json()).then(user => {
     if (user.role === 'admin') {
-      document.getElementById('adminNavLink').style.display = '';
+      ['adminNavLink', 'adminNavLinkMobile'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = '';
+      });
     }
   }).catch(() => {});
 }

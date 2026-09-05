@@ -22,8 +22,10 @@ async function verifyAndRestoreSession() {
       currentUser = await res.json();
       updateAuthUI();
       if (currentUser.role === 'admin') {
-        const adminLink = document.getElementById('adminNavLink');
-        if (adminLink) adminLink.style.display = '';
+        ['adminNavLink', 'adminNavLinkMobile'].forEach((id) => {
+          const adminLink = document.getElementById(id);
+          if (adminLink) adminLink.style.display = '';
+        });
       }
     } else {
       localStorage.removeItem('authToken');
