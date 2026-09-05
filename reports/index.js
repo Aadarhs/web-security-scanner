@@ -2,8 +2,12 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 
-const REPORTS_DIR = path.join(__dirname, 'generated');
-if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
+const REPORTS_DIR = process.env.VERCEL === '1' ? '/tmp/reports/generated' : path.join(__dirname, 'generated');
+try {
+  if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
+} catch (e) {
+  console.error('[Reports] Could not create reports dir:', e.message);
+}
 
 function generateJSONReport(scan, vulnerabilities, reportId) {
   return new Promise((resolve, reject) => {
