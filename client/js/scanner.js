@@ -261,6 +261,9 @@ function onScanComplete(data) {
 
   foundVulnerabilities = data.vulnerabilities || [];
 
+  const foundEl = document.getElementById('foundCount');
+  if (foundEl) foundEl.textContent = foundVulnerabilities.length;
+
   document.getElementById('resultCritical').textContent = data.counts?.critical || 0;
   document.getElementById('resultHigh').textContent = data.counts?.high || 0;
   document.getElementById('resultMedium').textContent = data.counts?.medium || 0;
@@ -308,6 +311,14 @@ function startPolling(scanId) {
           const d = await stepRes.json();
           if (d.error) return;
           if (typeof d.progress === 'number') updateProgress(d.progress);
+          const modEl = document.getElementById('currentModule');
+          if (modEl && d.currentModule && d.currentModule !== 'engine') {
+            modEl.textContent = d.currentModule;
+          }
+          if (typeof d.foundCount === 'number') {
+            const fc = document.getElementById('foundCount');
+            if (fc) fc.textContent = d.foundCount;
+          }
         }
       }
 

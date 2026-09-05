@@ -150,11 +150,20 @@ function initNavigation() {
     });
     navMobile.querySelectorAll('.nav-link').forEach((l) => {
       l.addEventListener('click', () => {
-        navMobile.classList.remove('open');
-        navToggle.setAttribute('aria-expanded', 'false');
-        navToggle.querySelector('i').className = 'fas fa-bars';
+        closeMobileNav();
       });
     });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && navMobile.classList.contains('open')) {
+        closeMobileNav();
+        navToggle.focus();
+      }
+    });
+    function closeMobileNav() {
+      navMobile.classList.remove('open');
+      navToggle.setAttribute('aria-expanded', 'false');
+      navToggle.querySelector('i').className = 'fas fa-bars';
+    }
   }
 }
 
@@ -550,19 +559,27 @@ function renderVulnerabilities(vulnerabilities, containerId = 'vulnerabilitiesLi
   if (!list) return;
 
   if (!vulnerabilities || vulnerabilities.length === 0) {
-    list.innerHTML = '<div class="empty-state"><i class="fas fa-shield-check" style="color:var(--success);font-size:3rem;margin-bottom:1rem"></i><p>No vulnerabilities detected. The target appears secure.</p></div>';
+    list.innerHTML = '<div class="empty-state"><i class="fas fa-shield-check" style="color:var(--success);font-size:3rem;margin-bottom:1rem"></i><p>No vulnerabilities detected by the checks performed.</p><p class="honest-note"><i class="fas fa-info-circle"></i> This only reflects the selected modules against this deployment at scan time — it is not a certificate that the target is secure.</p></div>';
     return;
   }
 
   list.innerHTML = '';
   vulnerabilities.forEach((v, idx) => {
     const div = document.createElement('div');
-    div.className = `vuln-card severity-${v.severity}${v.ignored ? ' ignored' : ''}`;
+    const conf = (v.confidence || 'confirmed').toLowerCase() === 'potential' ? 'potential' : (v.confidence || 'confirmed').toLowerCase() === 'advisory' ? 'advisory' : 'confirmed';
+    const confLabel = { confirmed: 'Confirmed', potential: 'Potential', advisory: 'Advisory' }[conf];
+    const confBadge = `<span class="confidence-badge confidence-${conf}" title="How sure the scanner is this finding is real">${confLabel}</span>`;
+    const confHint = conf === 'confirmed'
+      ? '<div class="vuln-hint confidence-confirmed"><i class="fas fa-check-circle"></i> Confirmed by observed evidence from the target.</div>'
+      : conf === 'potential'
+        ? '<div class="vuln-hint"><i class="fas fa-exclamation-triangle"></i> Potential issue — verify manually before treating it as exploitable.</div>'
+        : '<div class="vuln-hint"><i class="fas fa-info-circle"></i> Advisory — a hardening or review note, not a confirmed exploit.</div>';
+    div.className = `vuln-card severity-${v.severity} confidence-${conf}${v.ignored ? ' ignored' : ''}`;
     const isFromHistoryView = containerId !== 'vulnerabilitiesList';
     div.innerHTML = `
       <div class="vuln-card-header">
         <span class="vuln-title">${v.ignored ? '<i class="fas fa-eye-slash" style="margin-right:6px;color:var(--text-muted)"></i>' : ''}${v.title}</span>
-        <span class="vuln-badge ${v.severity}">${v.severity}</span>
+        <span class="vuln-badges"><span class="vuln-badge ${v.severity}">${v.severity}</span>${confBadge}</span>
       </div>
       <div class="vuln-meta">
         <span><i class="fas fa-tag"></i> ${v.type}</span>
@@ -570,6 +587,7 @@ function renderVulnerabilities(vulnerabilities, containerId = 'vulnerabilitiesLi
         ${v.owasp_category ? `<span><i class="fas fa-book"></i> ${v.owasp_category}</span>` : ''}
         ${v.cve_id ? `<span><i class="fas fa-bug"></i> ${v.cve_id}</span>` : ''}
       </div>
+      <div class="vuln-hint-wrap">${confHint}</div>
       <div class="vuln-details">
         <p><strong>Description:</strong> ${v.description || 'No description'}</p>
         <p><strong>Payload:</strong> <code>${v.payload || 'N/A'}</code></p>
@@ -872,7 +890,13 @@ function renderAIAnalysis(analysis) {
   const content = document.getElementById('aiAnalysisContent');
   if (!content) return;
 
-  let html = `<div class="ai-risk-badge" style="padding:0.5rem;margin-bottom:0.5rem;border-radius:4px;background:rgba(0,240,255,0.1);border-left:3px solid var(--accent);">
+  let html = '';
+
+  if (analysis.provider && analysis.provider !== 'llm') {
+    html += '<p class="honest-note" style="margin-top:0 !important;"><i class="fas fa-info-circle"></i> <strong>Local summary</strong> — no external AI service was reachable, so this report was generated from the scan data alone. General statements about exploit-chaining are intentionally not included.</p>';
+  }
+
+  html += `<div class="ai-risk-badge" style="padding:0.5rem;margin-bottom:0.5rem;border-radius:4px;background:rgba(0,240,255,0.1);border-left:3px solid var(--accent);">
     <p style="margin:0;"><strong>Risk Summary:</strong> ${analysis.riskSummary || 'No risk summary available'}</p>
   </div>`;
 

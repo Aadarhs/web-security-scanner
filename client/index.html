@@ -211,6 +211,17 @@
         </div>
       </div>
 
+      <details class="methodology">
+        <summary><i class="fas fa-microscope"></i> Methodology, confidence levels & limitations</summary>
+        <ul>
+          <li><strong>Confirmed</strong> — the evidence directly shows the issue (e.g. a leaked database error, unencoded payload in the response, a missing security header).</li>
+          <li><strong>Potential</strong> — behavior suggests a problem but cannot be proven from outside (e.g. timing difference, reflected input, a login flow that may accept default credentials). Manually verify these before acting on them.</li>
+          <li><strong>Advisory</strong> — a hardening or review note rather than a confirmed exploit (e.g. imperfect CSRF/SameSite posture, echo endpoints).</li>
+          <li>Findings are only reported when a check produced real evidence. If a live service (like the NVD CVE API) is unavailable, no CVE data is shown rather than fabricating results.</li>
+          <li>These tests are intentionally non-destructive and run from this server. A "clean" result means none of the selected checks found anything at this moment — it is not a certificate that the target is secure.</li>
+        </ul>
+      </details>
+
       <div class="scan-progress-container" id="scanProgress" style="display:none;">
         <div class="card glass">
           <div class="card-header">
@@ -252,7 +263,7 @@
             <button class="btn btn-sm" id="clearLogs"><i class="fas fa-eraser"></i> Clear</button>
           </div>
           <div class="card-body">
-            <div class="terminal" id="scanLog">
+            <div class="terminal" id="scanLog" role="log" aria-live="polite" aria-relevant="additions">
               <div class="terminal-line info">[System] Scanner engine initialized</div>
               <div class="terminal-line info">[System] Waiting for target URL...</div>
             </div>

@@ -1217,3 +1217,119 @@ body {
   #pentest .dashboard-grid { grid-template-columns: 1fr; }
   #pentest .dashboard-grid .card[style*="span 2"] { grid-column: auto !important; }
 }
+
+/* Confidence badges */
+.vuln-badges {
+  display: inline-flex;
+  align-items: center;
+}
+
+.confidence-badge {
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  margin-left: 0.5rem;
+  border: 1px solid transparent;
+}
+.confidence-badge.confidence-confirmed {
+  background: rgba(0, 204, 102, 0.12);
+  color: var(--success);
+  border-color: rgba(0, 204, 102, 0.3);
+}
+.confidence-badge.confidence-potential {
+  background: rgba(255, 165, 0, 0.12);
+  color: #ffa500;
+  border-color: rgba(255, 165, 0, 0.35);
+}
+.confidence-badge.confidence-advisory {
+  background: rgba(0, 240, 255, 0.1);
+  color: var(--accent-cyan);
+  border-color: rgba(0, 240, 255, 0.3);
+}
+
+/* Unverified findings: dashed edge to signal manual review needed */
+.vuln-card.confidence-potential,
+.vuln-card.confidence-advisory {
+  border-left-style: dashed;
+}
+
+.vuln-hint {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-color);
+  background: rgba(255, 165, 0, 0.04);
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+}
+.vuln-hint.confidence-confirmed {
+  border-color: rgba(0, 204, 102, 0.25);
+  background: rgba(0, 204, 102, 0.04);
+}
+
+/* Honest scan-note under results summary */
+.honest-note {
+  margin-top: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--accent-cyan);
+  background: var(--bg-glass);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Methodology & limitations disclosure */
+.methodology {
+  margin-top: 1.25rem;
+}
+.methodology summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 0.5rem 0;
+  user-select: none;
+}
+.methodology[open] summary {
+  color: var(--accent-cyan);
+}
+.methodology ul {
+  margin: 0.35rem 0 0 1.1rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* Evidence blocks: scroll instead of overflowing */
+.vuln-details pre {
+  max-height: 160px;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Accessibility: visible keyboard focus */
+:focus-visible {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: 2px;
+}
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
