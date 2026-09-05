@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "nodemon server/index.js",
+    "build": "node -e \"console.log('noop build')\"",
     "scan": "node scanner-engine/index.js",
     "seed": "node database/seed.js",
     "test": "vitest run",
