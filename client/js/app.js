@@ -140,6 +140,13 @@ function initNavigation() {
   });
 }
 
+function filterCveList(query) {
+  const needle = (query || '').toLowerCase().trim();
+  document.querySelectorAll('#cveListBody tr').forEach(row => {
+    row.style.display = row.textContent.toLowerCase().includes(needle) ? '' : 'none';
+  });
+}
+
 function initThemeToggle() {
   const toggle = document.getElementById('themeToggle');
   const saved = localStorage.getItem('theme');

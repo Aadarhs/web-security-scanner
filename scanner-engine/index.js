@@ -22,7 +22,7 @@ const { generateAnalysis } = require('./ai-analyzer');
 const scanCancelled = new Set();
 
 const httpClient = axios.create({
-  timeout: parseInt(process.env.SCAN_TIMEOUT) || 8000,
+  timeout: parseInt(process.env.SCAN_TIMEOUT) || 5000,
   headers: {
     'User-Agent': process.env.USER_AGENT || 'WebSecurityScanner/1.0',
     'Accept': 'text/html,application/json,*/*',
@@ -30,6 +30,16 @@ const httpClient = axios.create({
   maxRedirects: 5,
   validateStatus: status => status < 500,
 });
+
+const PER_MODULE_TIMEOUT = parseInt(process.env.SCAN_MODULE_TIMEOUT) || 40000;
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
 
 const scannerModules = [
   { key: 'sqli', name: 'SQL Injection', module: scanSQLi, weight: 12 },
@@ -55,12 +65,16 @@ const MODULE_BATCH_SIZE = parseInt(process.env.SCAN_MODULE_CONCURRENCY) || 2;
 
 const scanStates = new Map();
 
-function ensureScanState(scanId, targetUrl, requestedModules) {
+function ensureScanState(scanId, targetUrl, requestedModules, resumeKeys) {
   if (scanStates.has(scanId)) return scanStates.get(scanId);
 
   let modulesToRun = scannerModules;
   if (requestedModules && Array.isArray(requestedModules) && requestedModules.length > 0) {
     modulesToRun = scannerModules.filter(m => requestedModules.includes(m.key));
+  }
+  if (resumeKeys && Array.isArray(resumeKeys) && resumeKeys.length > 0) {
+    const done = new Set(resumeKeys);
+    modulesToRun = modulesToRun.filter(m => !done.has(m.key));
   }
 
   const st = {
@@ -83,8 +97,8 @@ function cancelScan(scanId) {
   return true;
 }
 
-async function runNextBatch(scanId, targetUrl, onProgress, onLog, onComplete, requestedModules) {
-  const st = ensureScanState(scanId, targetUrl, requestedModules);
+async function runNextBatch(scanId, targetUrl, onProgress, onLog, onComplete, requestedModules, resumeKeys, onModuleResult) {
+  const st = ensureScanState(scanId, targetUrl, requestedModules, resumeKeys || []);
 
   if (!st.loadLogged) {
     st.loadLogged = true;
@@ -96,21 +110,29 @@ async function runNextBatch(scanId, targetUrl, onProgress, onLog, onComplete, re
 
     onLog(scanId, 'info', `Running ${mod.name} scanner...`, mod.name);
 
+    let results = [];
+    let timedOut = false;
     try {
-      let results;
-      if (mod.key === 'passive') {
-        if (!st.passiveResponse) {
-          try {
-            st.passiveResponse = await httpClient.get(st.url, { timeout: 8000, validateStatus: s => s < 500 });
-          } catch {
-            st.passiveResponse = { data: '', headers: {} };
+      const runModule = async () => {
+        if (mod.key === 'passive') {
+          if (!st.passiveResponse) {
+            try {
+              st.passiveResponse = await httpClient.get(st.url, { timeout: 8000, validateStatus: s => s < 500 });
+            } catch {
+              st.passiveResponse = { data: '', headers: {} };
+            }
           }
+          return mod.module(st.url, st.passiveResponse);
         }
-        results = await mod.module(st.url, st.passiveResponse);
-      } else {
-        results = await mod.module(st.url, httpClient);
-      }
+        return mod.module(st.url, httpClient);
+      };
+      results = await withTimeout(runModule(), PER_MODULE_TIMEOUT, mod.name);
+    } catch (err) {
+      timedOut = true;
+      onLog(scanId, 'error', `${mod.name} ${err.message ? ('timed out or failed: ' + err.message) : 'errored'} - skipped`, mod.name);
+    }
 
+    if (!timedOut) {
       if (results.length > 0) {
         onLog(scanId, 'warning', `${mod.name}: Found ${results.length} vulnerability(s)`, mod.name);
         for (const vuln of results) {
@@ -121,8 +143,10 @@ async function runNextBatch(scanId, targetUrl, onProgress, onLog, onComplete, re
       } else {
         onLog(scanId, 'info', `${mod.name}: No vulnerabilities detected`, mod.name);
       }
-    } catch (err) {
-      onLog(scanId, 'error', `${mod.name} scanner failed: ${err.message}`, mod.name);
+    }
+
+    if (onModuleResult) {
+      try { onModuleResult(scanId, mod.key, results); } catch (e) { onLog(scanId, 'error', `Failed to persist module results: ${e.message}`, mod.name); }
     }
 
     st.completedWeight += mod.weight;

@@ -863,6 +863,9 @@ body {
 }
 
 .badge-info { background: rgba(0, 240, 255, 0.15); color: var(--accent-cyan); }
+.badge-danger { background: rgba(255, 60, 90, 0.15); color: #ff4d6d; }
+.badge-warning { background: rgba(255, 180, 0, 0.15); color: #ffb400; }
+.badge-success { background: rgba(0, 204, 102, 0.15); color: #00cc66; }
 
 /* Docs sections */
 #docs .card {

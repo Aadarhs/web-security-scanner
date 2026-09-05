@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../config/db');
-const { sanitizeUrl, generateId, calculateRiskScore, severityCounts } = require('../utils/helpers');
+const { sanitizeUrl, generateId, calculateRiskScore } = require('../utils/helpers');
 const { runNextBatch, cancelScan, scannerModules } = require('../../scanner-engine/index');
 const { scanLimiter } = require('../middleware/rateLimiter');
 const { optionalAuth, authenticate } = require('../middleware/auth');
@@ -21,19 +21,22 @@ function makeCallbacks(req, socketId) {
   };
 
   const onComplete = (id, vulnerabilities, cancelled = false) => {
-    const counts = severityCounts(vulnerabilities);
-    const riskScore = calculateRiskScore(vulnerabilities);
-
-    const insertVuln = db.prepare(`
-      INSERT INTO vulnerabilities (scan_id, type, severity, title, description, endpoint, parameter, payload, evidence, remediation, owasp_category, cve_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    for (const v of vulnerabilities) {
-      try { insertVuln.run(id, v.type, v.severity, v.title, v.description, v.endpoint, v.parameter, v.payload, v.evidence, v.remediation, v.owasp_category, v.cve_id); } catch (e) { console.error('[Scan] Insert vuln error:', e); }
-    }
-
     const status = cancelled ? 'cancelled' : 'completed';
+    let counts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+    let total = vulnerabilities ? vulnerabilities.length : 0;
+    let riskScore = 0;
+
+    try {
+      const rows = db.prepare('SELECT severity, COUNT(*) as c FROM vulnerabilities WHERE scan_id = ? GROUP BY severity').all(id);
+      for (const r of rows) {
+        if (counts[r.severity] !== undefined) { counts[r.severity] = r.c; }
+      }
+      const totalRow = db.prepare('SELECT COUNT(*) as c FROM vulnerabilities WHERE scan_id = ?').get(id);
+      total = totalRow ? totalRow.c : total;
+      const stored = db.prepare('SELECT severity FROM vulnerabilities WHERE scan_id = ?').all(id).map(r => ({ severity: r.severity }));
+      riskScore = calculateRiskScore(stored);
+    } catch (e) { /* counts fall back to engine array */ }
+
     db.prepare(`
       UPDATE scans SET 
         status = ?, progress = 100, risk_score = ?,
@@ -41,7 +44,7 @@ function makeCallbacks(req, socketId) {
         medium_count = ?, low_count = ?, info_count = ?,
         completed_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(status, riskScore, vulnerabilities.length, counts.critical, counts.high, counts.medium, counts.low, counts.info, id);
+    `).run(status, riskScore, total, counts.critical, counts.high, counts.medium, counts.low, counts.info, id);
 
     try { db.save(); } catch {}
 
@@ -55,7 +58,24 @@ function makeCallbacks(req, socketId) {
     }
   };
 
-  return { onProgress, onLog, onComplete };
+  const insertVuln = db.prepare(`
+    INSERT INTO vulnerabilities (scan_id, type, severity, title, description, endpoint, parameter, payload, evidence, remediation, owasp_category, cve_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const onModuleResult = (id, moduleKey, results) => {
+    db.prepare("INSERT INTO scan_metadata (scan_id, key, value) VALUES (?, 'done:' || ?, '1')").run(id, moduleKey);
+    const created = [];
+    for (const v of (results || [])) {
+      try {
+        insertVuln.run(id, v.type, v.severity, v.title, v.description, v.endpoint, v.parameter, v.payload, v.evidence, v.remediation, v.owasp_category, v.cve_id);
+        created.push(v);
+      } catch (e) {}
+    }
+    try { db.save(); } catch {}
+  };
+
+  return { onProgress, onLog, onComplete, onModuleResult };
 }
 
 router.post('/', scanLimiter, optionalAuth, async (req, res) => {
@@ -106,8 +126,11 @@ router.post('/:id/step', optionalAuth, async (req, res) => {
       try { requestedModules = JSON.parse(meta.value); } catch (e) { requestedModules = null; }
     }
 
+    const doneKeys = db.prepare("SELECT key FROM scan_metadata WHERE scan_id = ? AND key LIKE 'done:%'").all(id)
+      .map(r => r.key.replace('done:', ''));
+
     const callbacks = makeCallbacks(req, req.body?.socketId || null);
-    const { finished, cancelled } = await runNextBatch(id, scan.target_url, callbacks.onProgress, callbacks.onLog, callbacks.onComplete, requestedModules);
+    const { finished, cancelled } = await runNextBatch(id, scan.target_url, callbacks.onProgress, callbacks.onLog, callbacks.onComplete, requestedModules, doneKeys, callbacks.onModuleResult);
     const updated = db.prepare('SELECT status, progress FROM scans WHERE id = ?').get(id);
     res.json({
       scanId: id,
@@ -189,7 +212,11 @@ router.get('/:id/status', (req, res) => {
     } catch (e) {}
   }
 
-  const counts = severityCounts(vulnerabilities);
+  const counts = (() => {
+    const c = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+    for (const v of vulnerabilities) { if (c[v.severity] !== undefined) c[v.severity]++; }
+    return c;
+  })();
 
   res.json({
     id,
