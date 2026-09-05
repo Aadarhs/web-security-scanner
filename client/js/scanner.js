@@ -2,6 +2,7 @@ let socket = null;
 let currentScanId = null;
 let foundVulnerabilities = [];
 let pollTimer = null;
+let socketWarned = false;
 
 document.addEventListener('DOMContentLoaded', () => {
   initSocket();
@@ -43,12 +44,14 @@ function initSocket() {
     socket = io(window.location.origin, {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: Infinity,
+      reconnectionDelay: 2000,
+      reconnectionAttempts: 5,
+      timeout: 5000,
     });
 
     socket.on('connect', () => {
       console.log('[Socket] Connected:', socket.id);
+      socketWarned = false;
     });
 
     socket.on('scan:started', (data) => {
@@ -82,7 +85,10 @@ function initSocket() {
 
     socket.on('connect_error', (err) => {
       console.log('[Socket] Connection error:', err.message);
-      addLogEntry('WebSocket disconnected - polling mode active', 'warning', 'System');
+      if (!socketWarned) {
+        socketWarned = true;
+        addLogEntry('WebSocket unavailable - polling mode active', 'warning', 'System');
+      }
       if (currentScanId && !pollTimer) {
         startPolling(currentScanId);
       }
