@@ -1,34 +1,14 @@
 const express = require('express');
 const db = require('../config/db');
 const { sanitizeUrl, generateId, calculateRiskScore, severityCounts } = require('../utils/helpers');
-const { runScan, cancelScan, scannerModules } = require('../../scanner-engine/index');
+const { runNextBatch, cancelScan, scannerModules } = require('../../scanner-engine/index');
 const { scanLimiter } = require('../middleware/rateLimiter');
 const { optionalAuth, authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.post('/', scanLimiter, optionalAuth, async (req, res) => {
-  let { url, modules: requestedModules } = req.body;
-  if (!url) return res.status(400).json({ error: 'Target URL is required' });
-
-  url = sanitizeUrl(url);
-  if (!url) return res.status(400).json({ error: 'Invalid URL format' });
-
-  const scanId = generateId();
+function makeCallbacks(req, socketId) {
   const io = req.app.get('io');
-  const socketId = req.body.socketId;
-
-  db.prepare(`
-    INSERT INTO scans (id, target_url, status, user_id)
-    VALUES (?, ?, 'running', ?)
-  `).run(scanId, url, req.user?.id || null);
-  db.save();
-
-  res.json({ scanId, targetUrl: url, status: 'running' });
-
-  if (io && socketId) {
-    io.to(socketId).emit('scan:started', { scanId, targetUrl: url });
-  }
 
   const onProgress = (id, progress, eta) => {
     db.prepare('UPDATE scans SET progress = ? WHERE id = ?').run(progress, id);
@@ -75,9 +55,69 @@ router.post('/', scanLimiter, optionalAuth, async (req, res) => {
     }
   };
 
-  setImmediate(() => {
-    runScan(scanId, url, onProgress, onLog, onComplete, requestedModules);
-  });
+  return { onProgress, onLog, onComplete };
+}
+
+router.post('/', scanLimiter, optionalAuth, async (req, res) => {
+  let { url, modules: requestedModules } = req.body;
+  if (!url) return res.status(400).json({ error: 'Target URL is required' });
+
+  url = sanitizeUrl(url);
+  if (!url) return res.status(400).json({ error: 'Invalid URL format' });
+
+  const scanId = generateId();
+  const socketId = req.body.socketId;
+
+  db.prepare(`
+    INSERT INTO scans (id, target_url, status, user_id)
+    VALUES (?, ?, 'running', ?)
+  `).run(scanId, url, req.user?.id || null);
+
+  if (requestedModules && requestedModules.length > 0) {
+    db.prepare(`
+      INSERT INTO scan_metadata (scan_id, key, value)
+      VALUES (?, 'requestedModules', ?)
+    `).run(scanId, JSON.stringify(requestedModules));
+  }
+  db.save();
+
+  res.json({ scanId, targetUrl: url, status: 'running' });
+});
+
+router.post('/:id/step', optionalAuth, async (req, res) => {
+  const { id } = req.params;
+
+  let scan;
+  try {
+    scan = db.prepare('SELECT * FROM scans WHERE id = ?').get(id);
+  } catch (e) {
+    return res.status(500).json({ error: 'Could not load scan' });
+  }
+  if (!scan) return res.status(404).json({ error: 'Scan not found' });
+
+  if (scan.status !== 'running') {
+    return res.json({ scanId: id, status: scan.status, progress: scan.progress ?? 100, done: true });
+  }
+
+  try {
+    let requestedModules = null;
+    const meta = db.prepare("SELECT value FROM scan_metadata WHERE scan_id = ? AND key = 'requestedModules'").get(id);
+    if (meta && meta.value) {
+      try { requestedModules = JSON.parse(meta.value); } catch (e) { requestedModules = null; }
+    }
+
+    const callbacks = makeCallbacks(req, req.body?.socketId || null);
+    const { finished, cancelled } = await runNextBatch(id, scan.target_url, callbacks.onProgress, callbacks.onLog, callbacks.onComplete, requestedModules);
+    const updated = db.prepare('SELECT status, progress FROM scans WHERE id = ?').get(id);
+    res.json({
+      scanId: id,
+      status: cancelled ? 'cancelled' : (updated ? updated.status : 'running'),
+      progress: updated ? (updated.progress ?? 0) : 0,
+      done: finished || cancelled,
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Scan step failed: ' + e.message });
+  }
 });
 
 router.post('/:id/cancel', authenticate, (req, res) => {

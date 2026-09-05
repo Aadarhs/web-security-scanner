@@ -19,13 +19,10 @@ const { scanPassive } = require('./passive-scanner');
 const { enrichVulnerabilities } = require('./api-integration');
 const { generateAnalysis } = require('./ai-analyzer');
 
-const scanQueue = [];
-let activeScans = 0;
-const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_SCANS) || 3;
 const scanCancelled = new Set();
 
 const httpClient = axios.create({
-  timeout: parseInt(process.env.SCAN_TIMEOUT) || 15000,
+  timeout: parseInt(process.env.SCAN_TIMEOUT) || 8000,
   headers: {
     'User-Agent': process.env.USER_AGENT || 'WebSecurityScanner/1.0',
     'Accept': 'text/html,application/json,*/*',
@@ -56,26 +53,43 @@ const scannerModules = [
 
 const MODULE_BATCH_SIZE = parseInt(process.env.SCAN_MODULE_CONCURRENCY) || 2;
 
-async function runScan(scanId, targetUrl, onProgress, onLog, onComplete, requestedModules) {
-  onLog(scanId, 'info', `Initializing scan for ${targetUrl}`, 'engine');
+const scanStates = new Map();
 
-  onLog(scanId, 'info', `Target resolved: ${targetUrl}`, 'engine');
-  onLog(scanId, 'info', 'Starting vulnerability assessment...', 'engine');
+function ensureScanState(scanId, targetUrl, requestedModules) {
+  if (scanStates.has(scanId)) return scanStates.get(scanId);
 
   let modulesToRun = scannerModules;
   if (requestedModules && Array.isArray(requestedModules) && requestedModules.length > 0) {
     modulesToRun = scannerModules.filter(m => requestedModules.includes(m.key));
-    onLog(scanId, 'info', `Loading ${modulesToRun.length} of ${scannerModules.length} selected scanner modules`, 'engine');
-  } else {
-    onLog(scanId, 'info', `Loading all ${scannerModules.length} scanner modules`, 'engine');
   }
 
-  let completedWeight = 0;
-  const totalWeight = modulesToRun.reduce((s, m) => s + m.weight, 0);
-  const allVulnerabilities = [];
-  const scanStartTime = Date.now();
+  const st = {
+    url: targetUrl,
+    modulesToRun,
+    index: 0,
+    completedWeight: 0,
+    totalWeight: modulesToRun.reduce((s, m) => s + m.weight, 0),
+    vulnerabilities: [],
+    startedAt: Date.now(),
+    passiveResponse: null,
+    loadLogged: false,
+  };
+  scanStates.set(scanId, st);
+  return st;
+}
 
-  let passiveResponse = null;
+function cancelScan(scanId) {
+  scanCancelled.add(scanId);
+  return true;
+}
+
+async function runNextBatch(scanId, targetUrl, onProgress, onLog, onComplete, requestedModules) {
+  const st = ensureScanState(scanId, targetUrl, requestedModules);
+
+  if (!st.loadLogged) {
+    st.loadLogged = true;
+    onLog(scanId, 'info', `Loading ${st.modulesToRun.length} of ${scannerModules.length} scanner modules`, 'engine');
+  }
 
   async function runSingleModule(mod) {
     if (scanCancelled.has(scanId)) return 'cancelled';
@@ -85,22 +99,22 @@ async function runScan(scanId, targetUrl, onProgress, onLog, onComplete, request
     try {
       let results;
       if (mod.key === 'passive') {
-        if (!passiveResponse) {
+        if (!st.passiveResponse) {
           try {
-            passiveResponse = await httpClient.get(targetUrl, { timeout: 15000, validateStatus: s => s < 500 });
+            st.passiveResponse = await httpClient.get(st.url, { timeout: 8000, validateStatus: s => s < 500 });
           } catch {
-            passiveResponse = { data: '', headers: {} };
+            st.passiveResponse = { data: '', headers: {} };
           }
         }
-        results = await mod.module(targetUrl, passiveResponse);
+        results = await mod.module(st.url, st.passiveResponse);
       } else {
-        results = await mod.module(targetUrl, httpClient);
+        results = await mod.module(st.url, httpClient);
       }
 
       if (results.length > 0) {
         onLog(scanId, 'warning', `${mod.name}: Found ${results.length} vulnerability(s)`, mod.name);
         for (const vuln of results) {
-          allVulnerabilities.push(vuln);
+          st.vulnerabilities.push(vuln);
           onLog(scanId, vuln.severity === 'critical' || vuln.severity === 'high' ? 'warning' : 'info',
             `[${vuln.severity.toUpperCase()}] ${vuln.title}`, mod.name);
         }
@@ -111,67 +125,70 @@ async function runScan(scanId, targetUrl, onProgress, onLog, onComplete, request
       onLog(scanId, 'error', `${mod.name} scanner failed: ${err.message}`, mod.name);
     }
 
-    completedWeight += mod.weight;
-    const pct = Math.min(Math.round((completedWeight / totalWeight) * 100), 100);
-    const elapsed = Date.now() - scanStartTime;
-    const remainingWeight = totalWeight - completedWeight;
-    const eta = completedWeight > 0 ? Math.round((elapsed / completedWeight) * remainingWeight / 1000) : 0;
+    st.completedWeight += mod.weight;
+    const pct = Math.min(Math.round((st.completedWeight / st.totalWeight) * 100), 100);
+    const elapsed = Date.now() - st.startedAt;
+    const remainingWeight = st.totalWeight - st.completedWeight;
+    const eta = st.completedWeight > 0 ? Math.round((elapsed / st.completedWeight) * remainingWeight / 1000) : 0;
     onProgress(scanId, pct, eta);
     return 'ok';
   }
 
-  for (let i = 0; i < modulesToRun.length; i += MODULE_BATCH_SIZE) {
-    if (scanCancelled.has(scanId)) {
-      onLog(scanId, 'warning', 'Scan cancelled by user', 'engine');
-      onComplete(scanId, allVulnerabilities, true);
-      scanCancelled.delete(scanId);
-      return;
+  if (scanCancelled.has(scanId)) {
+    onLog(scanId, 'warning', 'Scan cancelled by user', 'engine');
+    onComplete(scanId, st.vulnerabilities, true);
+    scanCancelled.delete(scanId);
+    scanStates.delete(scanId);
+    return { finished: true, cancelled: true };
+  }
+
+  const batch = st.modulesToRun.slice(st.index, st.index + MODULE_BATCH_SIZE);
+  st.index += batch.length;
+  const batchResults = await Promise.all(batch.map(m => runSingleModule(m)));
+
+  if (batchResults.some(r => r === 'cancelled') || scanCancelled.has(scanId)) {
+    onLog(scanId, 'warning', 'Scan cancelled by user', 'engine');
+    onComplete(scanId, st.vulnerabilities, true);
+    scanCancelled.delete(scanId);
+    scanStates.delete(scanId);
+    return { finished: true, cancelled: true };
+  }
+
+  const finished = st.index >= st.modulesToRun.length;
+  if (finished) {
+    onLog(scanId, 'info', `Scan complete. Found ${st.vulnerabilities.length} total vulnerability(s)`, 'engine');
+
+    const typedVulns = {};
+    for (const v of st.vulnerabilities) {
+      typedVulns[v.type] = (typedVulns[v.type] || 0) + 1;
+    }
+    onLog(scanId, 'info', `Breakdown: ${Object.entries(typedVulns).map(([k, c]) => `${k}: ${c}`).join(', ')}`, 'engine');
+
+    if (process.env.API_ENRICHMENT_ENABLED === 'true') {
+      onLog(scanId, 'info', 'Enriching vulnerabilities with CVE/CWE data...', 'engine');
+      try {
+        const enriched = await enrichVulnerabilities(st.vulnerabilities);
+        onLog(scanId, 'info', `Enriched ${enriched.length} vulnerabilities with CVE data`, 'engine');
+        st.vulnerabilities.splice(0, st.vulnerabilities.length, ...enriched);
+      } catch (err) {
+        onLog(scanId, 'warning', `API enrichment failed: ${err.message}`, 'engine');
+      }
     }
 
-    const batch = modulesToRun.slice(i, i + MODULE_BATCH_SIZE);
-    const batchResults = await Promise.all(batch.map(m => runSingleModule(m)));
+    onComplete(scanId, st.vulnerabilities);
+    scanStates.delete(scanId);
+  }
 
-    if (batchResults.some(r => r === 'cancelled')) {
-      onLog(scanId, 'warning', 'Scan cancelled by user', 'engine');
-      onComplete(scanId, allVulnerabilities, true);
-      scanCancelled.delete(scanId);
-      return;
+  return { finished, cancelled: false };
+}
+
+function runScan(scanId, targetUrl, onProgress, onLog, onComplete, requestedModules) {
+  return (async () => {
+    for (;;) {
+      const { finished, cancelled } = await runNextBatch(scanId, targetUrl, onProgress, onLog, onComplete, requestedModules);
+      if (finished || cancelled) break;
     }
-  }
-
-  onLog(scanId, 'info', `Scan complete. Found ${allVulnerabilities.length} total vulnerability(s)`, 'engine');
-
-  const typedVulns = {};
-  for (const v of allVulnerabilities) {
-    typedVulns[v.type] = (typedVulns[v.type] || 0) + 1;
-  }
-  onLog(scanId, 'info', `Breakdown: ${Object.entries(typedVulns).map(([k, c]) => `${k}: ${c}`).join(', ')}`, 'engine');
-
-  if (process.env.API_ENRICHMENT_ENABLED === 'true') {
-    onLog(scanId, 'info', 'Enriching vulnerabilities with CVE/CWE data...', 'engine');
-    try {
-      const enriched = await enrichVulnerabilities(allVulnerabilities);
-      onLog(scanId, 'info', `Enriched ${enriched.length} vulnerabilities with CVE data`, 'engine');
-      allVulnerabilities.splice(0, allVulnerabilities.length, ...enriched);
-    } catch (err) {
-      onLog(scanId, 'warning', `API enrichment failed: ${err.message}`, 'engine');
-    }
-  }
-
-  if (process.env.AI_ANALYSIS_ENABLED === 'true') {
-    onLog(scanId, 'info', 'Generating AI-powered analysis...', 'engine');
-  }
-
-  onComplete(scanId, allVulnerabilities);
+  })();
 }
 
-function cancelScan(scanId) {
-  scanCancelled.add(scanId);
-  return true;
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-module.exports = { runScan, cancelScan, scannerModules };
+module.exports = { runScan, runNextBatch, cancelScan, scannerModules };

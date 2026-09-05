@@ -286,16 +286,38 @@ function resetScanButton() {
   btn.innerHTML = '<i class="fas fa-bolt"></i> Start Scan';
 }
 
+let stepMode = true;
+let lastProgressAt = Date.now();
+
 function startPolling(scanId) {
   stopPolling();
+  stepMode = true;
+  lastProgressAt = Date.now();
   pollTimer = setInterval(async () => {
     try {
+      if (stepMode) {
+        const stepRes = await fetch(`${API_BASE}/scan/${scanId}/step`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ socketId: socket?.id || null }),
+        });
+        if (stepRes.status === 404) {
+          stepMode = false;
+          addLogEntry('Step endpoint unavailable - falling back to status polling', 'warning', 'System');
+        } else {
+          const d = await stepRes.json();
+          if (d.error) return;
+          if (typeof d.progress === 'number') updateProgress(d.progress);
+        }
+      }
+
       const res = await fetch(`${API_BASE}/scan/${scanId}/status`);
       const d = await res.json();
       if (d.error) return;
 
       if (typeof d.progress === 'number') {
         updateProgress(d.progress);
+        lastProgressAt = Date.now();
       }
 
       const logEl = document.getElementById('scanLog');
@@ -304,7 +326,15 @@ function startPolling(scanId) {
         addLogEntry(l.message, l.level, l.module || 'engine');
       });
 
-      if (d.status === 'running' || d.status === 'queued' || d.status === 'pending') return;
+      if (d.status === 'running' || d.status === 'queued' || d.status === 'pending') {
+        if (Date.now() - lastProgressAt > 90000) {
+          stopPolling();
+          addLogEntry('Scan stalled - the server likely timed out. Retry with fewer modules or a faster target.', 'error', 'System');
+          resetScanButton();
+          showNotification('Scan stalled (server timeout). Try fewer modules.', 'error');
+        }
+        return;
+      }
 
       stopPolling();
       if (d.status === 'completed') {

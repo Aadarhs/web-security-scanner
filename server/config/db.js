@@ -30,7 +30,9 @@ const api = {
     const self = this;
     const stmt = self._db.prepare(sql);
 
-    return {
+    const wrapper = {
+      _sql: sql,
+
       get(...params) {
         try {
           if (params.length > 0) {
@@ -64,12 +66,16 @@ const api = {
       },
 
       run(...params) {
+        // sql.js export() (via saveDb) closes ALL open statements, so a prepared
+        // statement cannot be reused across writes. Re-prepare per invocation.
+        let fresh = null;
         try {
+          fresh = self._db.prepare(wrapper._sql);
           if (params.length > 0) {
-            stmt.bind(params);
-            stmt.step();
+            fresh.bind(params);
+            fresh.step();
           } else {
-            stmt.step();
+            fresh.step();
           }
           // Persist to disk after successful writes
           const result = { changes: self._db.getRowsModified() };
@@ -78,13 +84,18 @@ const api = {
           }
           return result;
         } catch (e) {
-          console.error('[DB] Statement error:', e.message);
+          console.error('[DB] Statement error:', e && e.message || e);
           return { changes: 0, error: e.message };
         } finally {
-          stmt.reset();
+          if (fresh) {
+            try { fresh.free(); } catch (e) {}
+          }
+          try { stmt.reset(); } catch (e) {}
         }
       },
     };
+
+    return wrapper;
   },
 
   close() {
