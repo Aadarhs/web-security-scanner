@@ -181,7 +181,9 @@ async function startScan() {
         socketId: socket?.id || null,
         modules: activeModules,
       }),
-      signal: AbortSignal.timeout(15000),
+      // Serverless (Vercel) runs the scan inline and only responds once done,
+      // which can take up to ~50s. Local keeps the fast step/poll flow.
+      signal: AbortSignal.timeout(65000),
     });
 
     const data = await res.json();
@@ -194,6 +196,26 @@ async function startScan() {
     }
 
     currentScanId = data.scanId;
+
+    // Serverless synchronous mode: the POST response already contains the full,
+    // completed result. Render it directly instead of polling.
+    if (data.status === 'completed' || data.status === 'cancelled') {
+      if (data.status === 'cancelled') {
+        addLogEntry('Scan was cancelled', 'warning', 'System');
+        resetScanButton();
+        return;
+      }
+      addLogEntry(`Scan initialized: ${data.scanId?.substring(0, 8)}...`, 'success', 'System');
+      addLogEntry('Scan completed synchronously on server.', 'success', 'System');
+      onScanComplete({
+        scanId: data.scanId,
+        vulnerabilities: data.vulnerabilities || [],
+        counts: data.counts || { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+        riskScore: data.risk_score || 0,
+      });
+      return;
+    }
+
     addLogEntry(`Scan initialized: ${data.scanId?.substring(0, 8)}...`, 'success', 'System');
     addLogEntry('Assessment in progress...', 'info', 'System');
 
@@ -256,7 +278,8 @@ function onScanComplete(data) {
   document.getElementById('scanStatusBadge').style.background = 'rgba(0, 204, 102, 0.15)';
   document.getElementById('scanStatusBadge').style.color = '#00cc66';
 
-  addLogEntry(`Scan complete! Found ${data.vulnerabilities?.length || 0} vulnerability(s)`, 'success', 'System');
+  const vulnCount = data.vulnerabilities?.length || 0;
+  addLogEntry(`Scan complete! Found ${vulnCount} ${vulnCount === 1 ? 'vulnerability' : 'vulnerabilities'}`, 'success', 'System');
   addLogEntry('Generating report...', 'info', 'System');
 
   foundVulnerabilities = data.vulnerabilities || [];
@@ -276,7 +299,8 @@ function onScanComplete(data) {
 
   document.getElementById('scanProgress').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  showNotification(`Scan complete: ${data.vulnerabilities?.length || 0} vulnerabilities found`, data.vulnerabilities?.length > 0 ? 'error' : 'success');
+  const found = data.vulnerabilities?.length || 0;
+  showNotification(`Scan complete: ${found} ${found === 1 ? 'vulnerability' : 'vulnerabilities'} found`, found > 0 ? 'error' : 'success');
 
   if (socket && currentScanId) {
     socket.emit('leave:scan', currentScanId);
@@ -306,7 +330,7 @@ function startPolling(scanId) {
         });
         if (stepRes.status === 404) {
           stepMode = false;
-          addLogEntry('Step endpoint unavailable - falling back to status polling', 'warning', 'System');
+          addLogEntry('Live feed unavailable - continuing with status polling', 'warning', 'System');
         } else {
           const d = await stepRes.json();
           if (d.error) return;

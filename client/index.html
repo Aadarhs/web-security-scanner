@@ -665,6 +665,13 @@
               <tr><td>Wordlist Generator</td><td><code>Words: admin,root,test</code></td><td>Generates 17x mutated variants per word</td></tr>
               <tr><td>JWT Decoder</td><td><code>Token: eyJhbGciOiJIUzI1NiIs...</code></td><td>Decodes JWT, detects alg:none, missing exp, admin claims</td></tr>
               <tr><td>Email Extractor</td><td><code>URL: https://example.com</code></td><td>Extracts emails + external links from page</td></tr>
+              <tr><td>HTTP Repeater</td><td><code>URL: https://example.com/api<br/>Method: POST</code></td><td>Sends crafted requests, shows raw response</td></tr>
+              <tr><td>Redirect Chain Analyzer</td><td><code>URL: https://example.com/go</code></td><td>Traces redirect hops, flags cross-host, downgrades, loops</td></tr>
+              <tr><td>Cookie Analyzer</td><td><code>URL: https://example.com</code></td><td>Checks HttpOnly, Secure, SameSite on Set-Cookie</td></tr>
+              <tr><td>robots.txt Analyzer</td><td><code>URL: https://example.com</code></td><td>Parses /robots.txt for disallowed paths & sitemaps</td></tr>
+              <tr><td>Server Fingerprinter</td><td><code>URL: https://example.com</code></td><td>Identifies server/tech from headers + body markers</td></tr>
+              <tr><td>Subdomain Takeover Check</td><td><code>Domain: example.com</code></td><td>Finds dangling CNAMEs pointing to unclaimed cloud services</td></tr>
+              <tr><td>JWT Cracker</td><td><code>Token: HS256 JWT</code></td><td>Brute-forces weak HMAC secrets against a wordlist</td></tr>
             </tbody>
           </table>
 
@@ -869,6 +876,87 @@
             <input type="text" id="emailUrl" class="cyber-input" placeholder="Target URL" style="width:100%;margin-bottom:0.3rem;" />
             <button class="btn btn-primary btn-sm" id="emailBtn"><i class="fas fa-search"></i> Extract</button>
             <div id="emailResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass" style="grid-column: span 2;">
+          <div class="card-header"><h3><i class="fas fa-paper-plane" style="color:#00f0ff"></i> HTTP Repeater</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Send a crafted request and inspect the full raw response (Burp Repeater style)</p>
+            <div class="filter-bar">
+              <select id="rpMethod" class="cyber-select" style="margin-right:0.3rem;">
+                <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>PATCH</option><option>HEAD</option><option>OPTIONS</option>
+              </select>
+              <input type="text" id="rpUrl" class="cyber-input" placeholder="URL (e.g., https://site.com/api/login)" style="flex:1;margin-bottom:0.3rem;" />
+            </div>
+            <input type="text" id="rpHeaders" class="cyber-input" placeholder='Extra headers as JSON (e.g., {"Authorization":"Bearer x"} - optional)' style="width:100%;margin-bottom:0.3rem;" />
+            <textarea id="rpBody" class="cyber-input" rows="3" placeholder="Request body (optional)" style="width:100%;margin-bottom:0.3rem;resize:vertical;font-family:monospace;"></textarea>
+            <button class="btn btn-primary btn-sm" id="rpBtn"><i class="fas fa-paper-plane"></i> Send Request</button>
+            <div id="rpResults" class="tool-output" style="margin-top:0.5rem;font-family:monospace;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-share-alt" style="color:#ffcc00"></i> Redirect Chain Analyzer</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Follow redirect hops and flag cross-host jumps, HTTPS downgrades, and loops</p>
+            <input type="text" id="rdrUrl" class="cyber-input" placeholder="URL that redirects (e.g., https://site.com/go/abc)" style="width:100%;margin-bottom:0.3rem;" />
+            <div class="filter-bar">
+              <input type="number" id="rdrMax" class="cyber-input-sm" value="10" min="1" max="20" style="width:70px;margin-right:0.3rem;" title="Max hops" />
+              <span style="flex:1;"></span>
+              <button class="btn btn-primary btn-sm" id="rdrBtn"><i class="fas fa-sync"></i> Analyze Chain</button>
+            </div>
+            <div id="rdrResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-cookie-bite" style="color:#ffcc00"></i> Cookie Security Analyzer</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Check Set-Cookie attributes (HttpOnly, Secure, SameSite) on the target</p>
+            <input type="text" id="ckUrl" class="cyber-input" placeholder="Target URL" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="ckBtn"><i class="fas fa-cookie"></i> Analyze Cookies</button>
+            <div id="ckResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-file-alt" style="color:#4488ff"></i> robots.txt Analyzer</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Fetch and parse robots.txt for disallowed paths and sitemap references</p>
+            <input type="text" id="rbUrl" class="cyber-input" placeholder="Target URL (e.g., https://site.com)" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="rbBtn"><i class="fas fa-file"></i> Fetch robots.txt</button>
+            <div id="rbResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-fingerprint" style="color:#00cc66"></i> Server Fingerprinter</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Identify web server and technology from response headers and page markers</p>
+            <input type="text" id="fpUrl" class="cyber-input" placeholder="Target URL" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="fpBtn"><i class="fas fa-fingerprint"></i> Fingerprint</button>
+            <div id="fpResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-ghost" style="color:#ff66aa"></i> Subdomain Takeover Check</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Detect subdomain CNAMEs pointing at unclaimed cloud services (takeover candidates)</p>
+            <input type="text" id="tkoDomain" class="cyber-input" placeholder="Domain (e.g., example.com)" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="tkoBtn"><i class="fas fa-ghost"></i> Check Candidates</button>
+            <div id="tkoResults" class="tool-output" style="margin-top:0.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="card glass">
+          <div class="card-header"><h3><i class="fas fa-key" style="color:#ff6600"></i> JWT Cracker</h3></div>
+          <div class="card-body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.5rem;">Brute-force weak HMAC (HS256/384/512) JWT secrets against a wordlist</p>
+            <input type="text" id="jwtCrackToken" class="cyber-input" placeholder="JWT token (eyJhbGciOiJIUzI1NiIs...)" style="width:100%;margin-bottom:0.3rem;" />
+            <button class="btn btn-primary btn-sm" id="jwtCrackBtn"><i class="fas fa-user-secret"></i> Crack Secret</button>
+            <div id="jwtCrackResults" class="tool-output" style="margin-top:0.5rem;"></div>
           </div>
         </div>
 
