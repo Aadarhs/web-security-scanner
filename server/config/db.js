@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 
-const DB_PATH = path.resolve(__dirname, '..', '..', 'database', 'scanner.db');
+const DB_PATH = process.env.DB_PATH ? path.resolve(process.env.DB_PATH) : path.resolve(__dirname, '..', '..', 'database', 'scanner.db');
 const SCHEMA_PATH = path.join(__dirname, '..', '..', 'database', 'schema.sql');
 const DB_DIR = path.dirname(DB_PATH);
 const IS_SERVERLESS = process.env.VERCEL === '1';

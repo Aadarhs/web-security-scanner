@@ -1,11 +1,109 @@
 const express = require('express');
 const db = require('../config/db');
 const { sanitizeUrl, generateId, calculateRiskScore } = require('../utils/helpers');
-const { runNextBatch, cancelScan, scannerModules } = require('../../scanner-engine/index');
+const { runNextBatch, runScanSync, cancelScan, scannerModules } = require('../../scanner-engine/index');
 const { scanLimiter } = require('../middleware/rateLimiter');
 const { optionalAuth, authenticate } = require('../middleware/auth');
 
 const router = express.Router();
+
+const IS_SERVERLESS = process.env.VERCEL === '1';
+
+// Build the full result payload a completed/cancelled scan (shared by the
+// serverless POST / and the /:id/status endpoint).
+function buildScanResult(id) {
+  let scan;
+  try {
+    scan = db.prepare('SELECT * FROM scans WHERE id = ?').get(id);
+  } catch (e) {
+    return { error: 'Could not load scan' };
+  }
+  if (!scan) return { error: 'Scan not found' };
+
+  let vulnerabilities = [];
+  if (scan.status === 'completed') {
+    try {
+      vulnerabilities = db.prepare('SELECT * FROM vulnerabilities WHERE scan_id = ?').all(id);
+    } catch (e) {}
+  }
+
+  const counts = (() => {
+    const c = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+    for (const v of vulnerabilities) { if (c[v.severity] !== undefined) c[v.severity]++; }
+    return c;
+  })();
+
+  return {
+    scanId: id,
+    id,
+    status: scan.status,
+    progress: scan.progress ?? (scan.status === 'completed' ? 100 : 0),
+    total_vulnerabilities: vulnerabilities.length,
+    risk_score: scan.risk_score || 0,
+    counts,
+    vulnerabilities: scan.status === 'completed' ? vulnerabilities : [],
+    scan: {
+      target_url: scan.target_url,
+      created_at: scan.created_at,
+      completed_at: scan.completed_at,
+    },
+  };
+}
+
+// Persist a module's findings + "done" marker (shared by local step protocol and
+// the serverless synchronous path).
+function storeModuleResult(id, moduleKey, results) {
+  db.prepare("INSERT INTO scan_metadata (scan_id, key, value) VALUES (?, 'done:' || ?, '1')").run(id, moduleKey);
+  const created = [];
+  for (const v of (results || [])) {
+    try {
+      insertVuln(id, v, moduleKey);
+      created.push(v);
+    } catch (e) {}
+  }
+  try { db.save(); } catch {}
+  return created;
+}
+
+const insertVuln = (id, v, moduleKey) => {
+  db.prepare(`
+    INSERT INTO vulnerabilities (scan_id, type, severity, title, description, endpoint, parameter, payload, evidence, remediation, owasp_category, cve_id, confidence, module)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, v.type, v.severity, v.title, v.description, v.endpoint, v.parameter, v.payload, v.evidence, v.remediation, v.owasp_category, v.cve_id, v.confidence || 'confirmed', v.module || moduleKey);
+};
+
+// Update the scans row to the final state with severity counts + risk score.
+// Shared by local step protocol and the serverless synchronous path.
+function persistComplete(id, vulnerabilities, cancelled = false) {
+  const status = cancelled ? 'cancelled' : 'completed';
+  let counts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+  let total = vulnerabilities ? vulnerabilities.length : 0;
+  let riskScore = 0;
+
+  try {
+    const rows = db.prepare('SELECT severity, COUNT(*) as c FROM vulnerabilities WHERE scan_id = ? GROUP BY severity').all(id);
+    for (const r of rows) {
+      if (counts[r.severity] !== undefined) { counts[r.severity] = r.c; }
+    }
+    const totalRow = db.prepare('SELECT COUNT(*) as c FROM vulnerabilities WHERE scan_id = ?').get(id);
+    total = totalRow ? totalRow.c : total;
+    const stored = db.prepare('SELECT severity FROM vulnerabilities WHERE scan_id = ?').all(id).map(r => ({ severity: r.severity }));
+    riskScore = calculateRiskScore(stored);
+  } catch (e) { /* counts fall back to engine array */ }
+
+  db.prepare(`
+    UPDATE scans SET 
+      status = ?, progress = 100, risk_score = ?,
+      total_vulnerabilities = ?, critical_count = ?, high_count = ?,
+      medium_count = ?, low_count = ?, info_count = ?,
+      completed_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(status, riskScore, total, counts.critical, counts.high, counts.medium, counts.low, counts.info, id);
+
+  try { db.save(); } catch {}
+
+  return { counts, total, riskScore, status };
+}
 
 function makeCallbacks(req, socketId) {
   const io = req.app.get('io');
@@ -21,59 +119,19 @@ function makeCallbacks(req, socketId) {
   };
 
   const onComplete = (id, vulnerabilities, cancelled = false) => {
-    const status = cancelled ? 'cancelled' : 'completed';
-    let counts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
-    let total = vulnerabilities ? vulnerabilities.length : 0;
-    let riskScore = 0;
-
-    try {
-      const rows = db.prepare('SELECT severity, COUNT(*) as c FROM vulnerabilities WHERE scan_id = ? GROUP BY severity').all(id);
-      for (const r of rows) {
-        if (counts[r.severity] !== undefined) { counts[r.severity] = r.c; }
-      }
-      const totalRow = db.prepare('SELECT COUNT(*) as c FROM vulnerabilities WHERE scan_id = ?').get(id);
-      total = totalRow ? totalRow.c : total;
-      const stored = db.prepare('SELECT severity FROM vulnerabilities WHERE scan_id = ?').all(id).map(r => ({ severity: r.severity }));
-      riskScore = calculateRiskScore(stored);
-    } catch (e) { /* counts fall back to engine array */ }
-
-    db.prepare(`
-      UPDATE scans SET 
-        status = ?, progress = 100, risk_score = ?,
-        total_vulnerabilities = ?, critical_count = ?, high_count = ?,
-        medium_count = ?, low_count = ?, info_count = ?,
-        completed_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(status, riskScore, total, counts.critical, counts.high, counts.medium, counts.low, counts.info, id);
-
-    try { db.save(); } catch {}
+    const result = persistComplete(id, vulnerabilities, cancelled);
 
     if (io) {
       io.to(socketId).emit(cancelled ? 'scan:cancelled' : 'scan:complete', {
         scanId: id,
         vulnerabilities: vulnerabilities,
-        counts,
-        riskScore,
+        counts: result.counts,
+        riskScore: result.riskScore,
       });
     }
   };
 
-  const insertVuln = db.prepare(`
-    INSERT INTO vulnerabilities (scan_id, type, severity, title, description, endpoint, parameter, payload, evidence, remediation, owasp_category, cve_id, confidence, module)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const onModuleResult = (id, moduleKey, results) => {
-    db.prepare("INSERT INTO scan_metadata (scan_id, key, value) VALUES (?, 'done:' || ?, '1')").run(id, moduleKey);
-    const created = [];
-    for (const v of (results || [])) {
-      try {
-        insertVuln.run(id, v.type, v.severity, v.title, v.description, v.endpoint, v.parameter, v.payload, v.evidence, v.remediation, v.owasp_category, v.cve_id, v.confidence || 'confirmed', v.module || moduleKey);
-        created.push(v);
-      } catch (e) {}
-    }
-    try { db.save(); } catch {}
-  };
+  const onModuleResult = (id, moduleKey, results) => storeModuleResult(id, moduleKey, results);
 
   return { onProgress, onLog, onComplete, onModuleResult };
 }
@@ -100,6 +158,33 @@ router.post('/', scanLimiter, optionalAuth, async (req, res) => {
     `).run(scanId, JSON.stringify(requestedModules));
   }
   db.save();
+
+  if (IS_SERVERLESS) {
+    // Serverless (Vercel): run the ENTIRE scan inside this one request. Each HTTP
+    // call may land on a fresh instance with a fresh /tmp DB, so the old
+    // step-polling protocol cannot survive across invocations. Running inline
+    // means one request === one complete scan, bounded by SCAN_BUDGET_MS.
+    const io = req.app.get('io');
+    const syncCallbacks = {
+      onProgress: (id, progress, eta) => {
+        db.prepare('UPDATE scans SET progress = ? WHERE id = ?').run(progress, id);
+        if (io) io.emit('scan:progress', { scanId: id, progress, eta });
+      },
+      onLog: (id, level, message, module) => {
+        db.prepare('INSERT INTO scan_logs (scan_id, level, message, module) VALUES (?, ?, ?, ?)').run(id, level, message, module || 'engine');
+        if (io) io.emit('scan:log', { scanId: id, level, message, module: module || 'engine', timestamp: new Date().toISOString() });
+      },
+      onModuleResult: (id, moduleKey, results) => storeModuleResult(id, moduleKey, results),
+      onComplete: (id, vulns, cancelled = false) => persistComplete(id, vulns, cancelled),
+    };
+
+    try {
+      await runScanSync(scanId, url, syncCallbacks.onProgress, syncCallbacks.onLog, syncCallbacks.onComplete, requestedModules, syncCallbacks.onModuleResult);
+      return res.json(buildScanResult(scanId));
+    } catch (e) {
+      return res.status(500).json({ error: 'Scan failed: ' + (e.message || 'unknown error') });
+    }
+  }
 
   res.json({ scanId, targetUrl: url, status: 'running' });
 });
@@ -201,39 +286,15 @@ router.get('/:id/status', (req, res) => {
   }
   if (!scan) return res.status(404).json({ error: 'Scan not found' });
 
+  const result = buildScanResult(id);
+  if (result.error) return res.status(404).json(result);
+
   let logs = [];
   try {
     logs = db.prepare('SELECT level, message, module, created_at AS timestamp FROM scan_logs WHERE scan_id = ? ORDER BY id ASC LIMIT 500').all(id);
   } catch (e) {}
 
-  let vulnerabilities = [];
-  if (scan.status === 'completed') {
-    try {
-      vulnerabilities = db.prepare('SELECT * FROM vulnerabilities WHERE scan_id = ?').all(id);
-    } catch (e) {}
-  }
-
-  const counts = (() => {
-    const c = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
-    for (const v of vulnerabilities) { if (c[v.severity] !== undefined) c[v.severity]++; }
-    return c;
-  })();
-
-  res.json({
-    id,
-    status: scan.status,
-    progress: scan.progress ?? (scan.status === 'completed' ? 100 : 0),
-    total_vulnerabilities: vulnerabilities.length,
-    risk_score: scan.risk_score || 0,
-    counts,
-    logs,
-    vulnerabilities: scan.status === 'completed' ? vulnerabilities : [],
-    scan: {
-      target_url: scan.target_url,
-      created_at: scan.created_at,
-      completed_at: scan.completed_at,
-    },
-  });
+  res.json({ ...result, logs });
 });
 
 module.exports = router;
